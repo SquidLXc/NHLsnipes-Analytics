@@ -1,0 +1,290 @@
+The current application is also missing a MAJOR part of the NHLsnipes product: REAL TEAM CRESTS/LOGOS AND REAL PLAYER HEADSHOTS.
+
+I do NOT want a website where every player is just a name and every team is just text.
+
+The entire application needs an actual asset system.
+
+IMPLEMENT THIS — do not just explain it.
+
+==================================================
+TEAM ASSET SYSTEM
+=================
+
+Every team record needs:
+
+team_id
+abbreviation
+name
+city
+conference
+division
+logo_url
+primary_color
+secondary_color
+
+Every place a team appears should automatically be capable of displaying its associated crest/logo:
+
+* Dashboard
+* Today's Slate
+* Game cards
+* NHL Snipes
+* Prop Center
+* Player cards
+* Player pages
+* Team pages
+* Matchup Lab
+* Team Vulnerability
+* Goalie pages
+* Search
+* Watchlist
+* Tables
+
+Do NOT hardcode individual logos into random components.
+
+The team ID must determine the correct asset.
+
+==================================================
+PLAYER ASSET SYSTEM
+===================
+
+Every player record needs:
+
+player_id
+full_name
+first_name
+last_name
+team_id
+position
+jersey_number
+headshot_url
+
+Every player card should support:
+
+REAL PLAYER HEADSHOT
+PLAYER NAME
+TEAM CREST
+POSITION
+JERSEY NUMBER
+
+This needs to work automatically for the entire NHL roster.
+
+Do NOT manually add a few player images as examples.
+
+==================================================
+DATA/ASSET PIPELINE
+===================
+
+The ingestion system needs to populate:
+
+team identity
+team logo/crest asset reference
+player identity
+player headshot asset reference
+
+The frontend then reads these values from the API/database.
+
+Architecture should be:
+
+DATA PROVIDER
+↓
+NORMALIZATION
+↓
+TEAMS / PLAYERS
+↓
+ASSET REFERENCES
+↓
+API
+↓
+FRONTEND COMPONENTS
+
+NOT:
+
+random image URLs manually pasted into React components.
+
+==================================================
+IMPORTANT LICENSING REQUIREMENT
+===============================
+
+Do NOT scrape NHL.com images and blindly redistribute them.
+
+Do NOT download NHL copyrighted assets into the repository just to make the UI look good.
+
+I understand NHL/team logos and player photography may have commercial licensing restrictions.
+
+Instead:
+
+1. Determine what asset source is legally/permitted for this application.
+2. Build the application around that source.
+3. If the data provider supplies permitted logo/headshot URLs, use those.
+4. If a separate licensed asset provider is required, make it configurable.
+5. Store the asset URL/reference in the database.
+6. If an asset is unavailable, show an NHLsnipes placeholder rather than a broken image.
+
+Do NOT use random stock hockey players.
+
+==================================================
+FRONTEND REQUIREMENTS
+=====================
+
+The following components MUST support real images:
+
+GameCard
+TeamBadge
+PlayerCard
+PlayerHero
+SnipeCard
+PropCard
+GoalieCard
+MatchupCard
+TeamHeader
+PlayerHeader
+SearchResults
+Watchlist
+Tables
+
+Example:
+
+[REAL PLAYER HEADSHOT]
+Connor McDavid
+EDM
+C
+#97
+
+and:
+
+[EDM CREST]
+Edmonton Oilers
+
+The exact player/team shown must come from the actual database record.
+
+==================================================
+PLAYER PAGE
+===========
+
+The player profile should have a large visual hero:
+
+---
+
+[REAL PLAYER HEADSHOT]
+
+CONNOR MCDAVID
+EDMONTON OILERS
+C • #97
+
+G
+A
+P
+SOG
+TOI
+
+---
+
+Then the analytics sections.
+
+==================================================
+TEAM PAGE
+=========
+
+Team hero:
+
+[REAL TEAM CREST]
+
+EDMONTON OILERS
+EDM
+
+Conference
+Division
+Record
+
+Then roster sections with real player headshots.
+
+==================================================
+GOALIE PAGE
+===========
+
+Same system:
+
+[REAL GOALIE HEADSHOT]
+
+PLAYER
+TEAM + CREST
+
+SV%
+GAA
+SA/G
+PROJECTED SAVES
+
+==================================================
+NO BROKEN IMAGES
+================
+
+Implement proper image handling:
+
+* lazy loading
+* loading skeleton
+* fallback image
+* broken-image handling
+* alt text
+* responsive sizing
+
+If the image fails:
+
+show a polished NHLsnipes avatar/crest placeholder.
+
+Never display a broken browser image icon.
+
+==================================================
+NO FAKE ASSETS
+==============
+
+Do NOT use:
+
+* fake player photos
+* random hockey players
+* fake team logos
+* AI-generated player identities
+* incorrect team logos
+* outdated team assignments
+
+The player/team identity must come from the canonical data model.
+
+==================================================
+CRITICAL
+========
+
+The site is supposed to feel like a REAL NHL analytics platform.
+
+Real games.
+Real teams.
+Real players.
+Real player photos where permitted.
+Real team assets where permitted.
+Real statistics.
+Real model outputs.
+
+The current text-only UI does NOT meet that requirement.
+
+Do not tell me this is "ready to publish" until:
+
+1. Real NHL teams are populated.
+2. Real players are populated.
+3. Team assets are wired into the team records.
+4. Player headshots are wired into player records.
+5. Game cards display the correct team assets.
+6. Player cards display the correct player images.
+7. Player pages display the correct player image.
+8. Team pages display the correct team crest.
+9. Goalie pages display the correct goalie image.
+10. Matchups display both team assets.
+11. Assets are loaded through reusable components.
+12. The source/rights for the assets are documented.
+13. Missing assets fail gracefully.
+14. No fake images are being used.
+
+And remember:
+
+DO NOT solve this by hardcoding 10 example players.
+
+Build the actual asset pipeline so it works for the entire NHL dataset.
+
+Do the implementation now.

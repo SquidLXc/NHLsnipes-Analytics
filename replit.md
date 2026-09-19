@@ -1,6 +1,6 @@
-# [Project name]
+# NHLsnipes
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+An independent NHL analytics terminal for matchup edges, player props, goalie environments and transparent model audit history.
 
 ## Run & Operate
 
@@ -22,23 +22,31 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/nhlsnipes` — React + Vite frontend and responsive product shell.
+- `artifacts/api-server/src/providers/nhl.ts` — provider boundary and response validation.
+- `artifacts/api-server/src/routes/nhl.ts` — read-only analytics API routes.
+- `lib/api-spec/openapi.yaml` — source of truth for generated API hooks and schemas.
+- `lib/db/src/schema` — relational persistence models.
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Live NHL and odds data never silently falls back to invented values; an unconfigured provider produces explicit offline states.
+- NHL EDGE and advanced tracking are accessed only through a provider adapter so licensing and commercial redistribution terms can be handled upstream.
+- OpenAPI is the single API contract; frontend hooks and server validators are generated from it.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+The product surfaces today's slate, ranked snipes, prop markets, matchup comparisons, goalie save environments, team vulnerability, watchlists, model performance and immutable audit records.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- The user wants a dark analytics terminal with neon green and neon purple/pink accents. Reference screenshots are visual inspiration only; do not copy their branding or exact UI.
+- Never present fake or random numbers as live NHL data.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Configure `NHLSNIPES_PROVIDER_URL` only after confirming the upstream source permits the intended public/commercial use.
+- Re-run API codegen after changing `lib/api-spec/openapi.yaml`.
 
 ## Pointers
 

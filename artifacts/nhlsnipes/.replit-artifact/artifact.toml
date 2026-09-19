@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "NHLsnipes"
+description = "A production-minded NHL analytics terminal for matchup analysis, player edges, props, goalie environments, team vulnerability, and transparent model audit history."
+version = "1.0.0"
+id = "artifacts/nhlsnipes"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23191
+
+[services.development]
+run = "pnpm --filter @workspace/nhlsnipes run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/nhlsnipes", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/nhlsnipes/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23191"
+BASE_PATH = "/"

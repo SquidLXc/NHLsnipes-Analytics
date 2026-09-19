@@ -1,0 +1,134 @@
+The application is NOT ready to publish.
+
+The UI saying:
+
+"No permitted NHL data provided as configured. Add NHL Snipes provider URL to enable live ingestion."
+
+means the actual NHL data ingestion pipeline is not configured and the site currently has no real NHL data.
+
+I specifically asked for a REAL, FUNCTIONING NHL analytics application.
+
+I do NOT want an empty frontend that waits for me to manually invent a provider URL.
+
+STOP calling this production-ready.
+
+I need you to do the following NOW:
+
+1. Inspect the entire existing data ingestion/provider architecture.
+
+2. Tell me EXACTLY what NHL data provider the application is currently designed to use.
+
+3. Tell me EXACTLY which environment variables/secrets are required.
+
+4. If the provider integration is missing, IMPLEMENT THE PROVIDER ADAPTER instead of leaving an empty placeholder.
+
+5. The application needs real NHL data for:
+
+   * current NHL schedule
+   * games
+   * teams
+   * team IDs
+   * team logos/crest URLs where permitted
+   * players
+   * player IDs
+   * player headshots where permitted
+   * rosters
+   * player game statistics
+   * goalie statistics
+   * team statistics
+   * standings
+   * injuries when the permitted source provides them
+   * line combinations when the permitted source provides them
+   * historical game/player statistics required by the models
+
+6. The ingestion system must normalize the provider's data into the PostgreSQL schema you already created.
+
+7. Build an actual synchronization process.
+
+I need:
+
+SYNC NHL DATA
+
+to actually retrieve real data and populate the database.
+
+8. The dashboard must automatically read from the populated database.
+
+9. Remove all fake/demo/random production values.
+
+10. If a specific data field genuinely isn't available from the selected provider, display DATA UNAVAILABLE for that field rather than inventing it.
+
+11. DO NOT use Math.random(), fake players, fake games, fake statistics, fake odds, or fake probabilities.
+
+12. DO NOT tell me to "add a provider URL" without first giving me the exact provider, exact endpoint format, exact required credentials, and exact environment variables.
+
+13. If the provider you designed around requires an API key, show me the exact secret name I need to add to Replit Secrets.
+
+14. If the provider requires a paid/licensed subscription for commercial use, tell me that clearly. Do not silently build the application around an unusable or unauthorized feed.
+
+15. If you intended to use ESPN data, verify the actual current ESPN NHL endpoints and implement them properly rather than leaving a placeholder URL.
+
+16. If you intended to use another provider, tell me exactly which provider and why.
+
+17. Create a provider abstraction so the application is NOT hardcoded to one source:
+
+NHLDataProvider
+├── schedule()
+├── teams()
+├── players()
+├── rosters()
+├── games()
+├── playerStats()
+├── goalieStats()
+├── teamStats()
+├── standings()
+├── injuries()
+└── lineCombinations()
+
+18. Add a real Admin/Data Health page showing:
+
+Provider
+Connection
+Last successful sync
+Last attempted sync
+Games imported
+Teams imported
+Players imported
+Player stats imported
+Goalie stats imported
+Errors
+
+19. The "SYSTEM NOMINAL" indicator must NOT say nominal when there is no NHL data.
+
+Use:
+
+DATA FEED OFFLINE
+DATA SOURCE NOT CONFIGURED
+SYNCING
+DATA CURRENT
+
+as appropriate.
+
+20. After implementing the data provider, actually run the synchronization and verify that the database contains real NHL records.
+
+21. Then verify that the frontend displays those records.
+
+22. Then verify the models receive actual player/team/game data.
+
+23. Then verify the prediction/audit tables receive actual model runs.
+
+24. Do not declare the project complete until the homepage can open and show actual current NHL games and actual NHL teams/players from the configured data source.
+
+I don't want another explanation of what I could configure later.
+
+I want you to FIX THE DATA PIPELINE IN THE APPLICATION.
+
+If a credential or paid provider subscription is genuinely required, stop at that exact point and give me:
+
+PROVIDER:
+API/BASE URL:
+SECRET NAME:
+WHAT I NEED TO PURCHASE/CREATE:
+EXACT REPLIT SECRET TO ADD:
+EXACT NEXT COMMAND/ACTION:
+
+Do not make me guess.

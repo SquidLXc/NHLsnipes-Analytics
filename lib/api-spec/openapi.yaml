@@ -3,13 +3,20 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: NHLsnipes analytics API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: dashboard
+  - name: games
+  - name: players
+  - name: teams
+  - name: goalies
+  - name: props
+  - name: analytics
 paths:
   /healthz:
     get:
@@ -24,7 +31,305 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get the dashboard summary
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+  /games:
+    get:
+      operationId: getGames
+      tags: [games]
+      summary: List games
+      parameters:
+        - $ref: "#/components/parameters/DateQuery"
+      responses:
+        "200":
+          description: Games
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Game"
+  /games/today:
+    get:
+      operationId: getTodayGames
+      tags: [games]
+      summary: Get today's NHL games
+      responses:
+        "200":
+          description: Today's games
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Game"
+  /games/future:
+    get:
+      operationId: getFutureGames
+      tags: [games]
+      summary: Get the next scheduled NHL games after today
+      responses:
+        "200":
+          description: Next future slate
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Game"
+  /games/{gameId}:
+    get:
+      operationId: getGame
+      tags: [games]
+      summary: Get a game
+      parameters:
+        - $ref: "#/components/parameters/GameId"
+      responses:
+        "200":
+          description: Game
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GameDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /players:
+    get:
+      operationId: getPlayers
+      tags: [players]
+      summary: List players
+      parameters:
+        - $ref: "#/components/parameters/SearchQuery"
+        - $ref: "#/components/parameters/TeamQuery"
+      responses:
+        "200":
+          description: Players
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Player"
+  /players/{playerId}:
+    get:
+      operationId: getPlayer
+      tags: [players]
+      summary: Get a player
+      parameters:
+        - $ref: "#/components/parameters/PlayerId"
+      responses:
+        "200":
+          description: Player profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayerDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /teams:
+    get:
+      operationId: getTeams
+      tags: [teams]
+      summary: List teams
+      responses:
+        "200":
+          description: Teams
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Team"
+  /teams/{teamId}:
+    get:
+      operationId: getTeam
+      tags: [teams]
+      summary: Get a team
+      parameters:
+        - $ref: "#/components/parameters/TeamId"
+      responses:
+        "200":
+          description: Team profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /goalies:
+    get:
+      operationId: getGoalies
+      tags: [goalies]
+      summary: List projected goalies
+      responses:
+        "200":
+          description: Goalies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Goalie"
+  /props:
+    get:
+      operationId: getProps
+      tags: [props]
+      summary: List player props
+      parameters:
+        - $ref: "#/components/parameters/MarketQuery"
+      responses:
+        "200":
+          description: Props
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Prop"
+  /props/{market}:
+    get:
+      operationId: getPropsByMarket
+      tags: [props]
+      summary: List props by market
+      parameters:
+        - $ref: "#/components/parameters/MarketPath"
+      responses:
+        "200":
+          description: Props
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Prop"
+  /matchups:
+    get:
+      operationId: getMatchups
+      tags: [analytics]
+      summary: List matchup edges
+      responses:
+        "200":
+          description: Matchups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Matchup"
+  /snipes:
+    get:
+      operationId: getSnipes
+      tags: [analytics]
+      summary: List player snipes
+      parameters:
+        - $ref: "#/components/parameters/MarketQuery"
+      responses:
+        "200":
+          description: Snipes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Snipe"
+  /audit:
+    get:
+      operationId: getAudit
+      tags: [analytics]
+      summary: List audited predictions
+      responses:
+        "200":
+          description: Audit results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditRecord"
+  /model-performance:
+    get:
+      operationId: getModelPerformance
+      tags: [analytics]
+      summary: Get historical model performance
+      responses:
+        "200":
+          description: Model performance
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ModelPerformance"
 components:
+  parameters:
+    DateQuery:
+      name: date
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+    SearchQuery:
+      name: search
+      in: query
+      required: false
+      schema:
+        type: string
+    TeamQuery:
+      name: team
+      in: query
+      required: false
+      schema:
+        type: string
+    MarketQuery:
+      name: market
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [goals, sog, points, assists, saves, blocks, hits]
+    MarketPath:
+      name: market
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [goals, sog, points, assists, saves, blocks, hits]
+    GameId:
+      name: gameId
+      in: path
+      required: true
+      schema:
+        type: string
+    PlayerId:
+      name: playerId
+      in: path
+      required: true
+      schema:
+        type: string
+    TeamId:
+      name: teamId
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +338,250 @@ components:
           type: string
       required:
         - status
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+      required: [error]
+    DataStatus:
+      type: object
+      properties:
+        state:
+          type: string
+          enum: [live, demo, offline, partial]
+        provider:
+          type: string
+        lastUpdated:
+          type: ["string", "null"]
+        message:
+          type: string
+      required: [state, provider, lastUpdated, message]
+    DashboardSummary:
+      type: object
+      properties:
+        dataStatus:
+          $ref: "#/components/schemas/DataStatus"
+        games:
+          type: integer
+        snipes:
+          type: integer
+        playersAnalyzed:
+          type: integer
+        topConfidence:
+          type: ["string", "null"]
+        modelVersion:
+          type: string
+        marketPerformance:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelPerformance"
+      required: [dataStatus, games, snipes, playersAnalyzed, topConfidence, modelVersion, marketPerformance]
+    Team:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        city: { type: ["string", "null"] }
+        abbreviation: { type: string }
+        conference: { type: ["string", "null"] }
+        division: { type: ["string", "null"] }
+        logoUrl: { type: ["string", "null"], format: uri }
+        primaryColor: { type: ["string", "null"] }
+        secondaryColor: { type: ["string", "null"] }
+      required: [id, name, city, abbreviation, conference, division, logoUrl, primaryColor, secondaryColor]
+    TeamDetail:
+      allOf:
+        - $ref: "#/components/schemas/Team"
+        - type: object
+          properties:
+            roster:
+              type: array
+              items:
+                $ref: "#/components/schemas/Player"
+            profile:
+              $ref: "#/components/schemas/TeamProfile"
+          required: [roster, profile]
+    Game:
+      type: object
+      properties:
+        id: { type: string }
+        gameDate: { type: string, format: date-time }
+        awayTeam: { $ref: "#/components/schemas/Team" }
+        homeTeam: { $ref: "#/components/schemas/Team" }
+        venue: { type: ["string", "null"] }
+        status:
+          type: string
+          enum: [scheduled, live, final, postponed, unknown]
+        statusDetail: { type: ["string", "null"] }
+        matchupScore: { type: ["number", "null"] }
+        goalEnvironment: { type: ["number", "null"] }
+        shotEnvironment: { type: ["number", "null"] }
+        powerPlayEdge: { type: ["number", "null"] }
+        goaltendingEdge: { type: ["number", "null"] }
+      required: [id, gameDate, awayTeam, homeTeam, venue, status, statusDetail, matchupScore, goalEnvironment, shotEnvironment, powerPlayEdge, goaltendingEdge]
+    GameDetail:
+      allOf:
+        - $ref: "#/components/schemas/Game"
+        - type: object
+          properties:
+            notes:
+              type: array
+              items: { type: string }
+          required: [notes]
+    Player:
+      type: object
+      properties:
+        id: { type: string }
+        fullName: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        teamId: { type: string }
+        team: { $ref: "#/components/schemas/Team" }
+        position: { type: string }
+        jerseyNumber: { type: ["integer", "null"] }
+        headshotUrl: { type: ["string", "null"], format: uri }
+      required: [id, fullName, firstName, lastName, teamId, team, position, jerseyNumber, headshotUrl]
+    PlayerDetail:
+      allOf:
+        - $ref: "#/components/schemas/Player"
+        - type: object
+          properties:
+            seasonStats:
+              $ref: "#/components/schemas/StatLine"
+            recentStats:
+              type: array
+              items:
+                $ref: "#/components/schemas/StatLine"
+            splits:
+              type: array
+              items:
+                $ref: "#/components/schemas/StatLine"
+          required: [seasonStats, recentStats, splits]
+    StatLine:
+      type: object
+      properties:
+        label: { type: string }
+        games: { type: integer }
+        goals: { type: number }
+        sog: { type: number }
+        points: { type: number }
+        assists: { type: number }
+        toi: { type: number }
+        ppToi: { type: number }
+      required: [label, games, goals, sog, points, assists, toi, ppToi]
+    Goalie:
+      type: object
+      properties:
+        id: { type: string }
+        fullName: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        jerseyNumber: { type: ["integer", "null"] }
+        headshotUrl: { type: ["string", "null"], format: uri }
+        team: { $ref: "#/components/schemas/Team" }
+        opponent:
+          oneOf:
+            - $ref: "#/components/schemas/Team"
+            - type: "null"
+        status:
+          type: string
+          enum: [confirmed, projected, unknown]
+        projectedSaves: { type: ["number", "null"] }
+        projectedShotsAgainst: { type: ["number", "null"] }
+        savePercentage: { type: ["number", "null"] }
+        goalsAgainst: { type: ["number", "null"] }
+        winProbability: { type: ["number", "null"] }
+        shutoutProbability: { type: ["number", "null"] }
+        saves25Plus: { type: ["number", "null"] }
+        saves30Plus: { type: ["number", "null"] }
+        saves35Plus: { type: ["number", "null"] }
+      required: [id, fullName, firstName, lastName, jerseyNumber, headshotUrl, team, opponent, status, projectedSaves, projectedShotsAgainst, savePercentage, goalsAgainst, winProbability, shutoutProbability, saves25Plus, saves30Plus, saves35Plus]
+    Prop:
+      type: object
+      properties:
+        id: { type: string }
+        player: { $ref: "#/components/schemas/Player" }
+        opponent: { $ref: "#/components/schemas/Team" }
+        market: { type: string }
+        line: { type: ["number", "null"] }
+        lineStatus:
+          type: string
+          enum: [available, unavailable]
+        modelProjection: { type: ["number", "null"] }
+        overProbability: { type: ["number", "null"] }
+        underProbability: { type: ["number", "null"] }
+        edge: { type: ["number", "null"] }
+        confidence: { type: ["string", "null"] }
+        source: { type: ["string", "null"] }
+      required: [id, player, opponent, market, line, lineStatus, modelProjection, overProbability, underProbability, edge, confidence, source]
+    Snipe:
+      type: object
+      properties:
+        id: { type: string }
+        player: { $ref: "#/components/schemas/Player" }
+        opponent: { $ref: "#/components/schemas/Team" }
+        score: { type: number }
+        goalProbability: { type: ["number", "null"] }
+        sogProjection: { type: ["number", "null"] }
+        pointProbability: { type: ["number", "null"] }
+        assistProbability: { type: ["number", "null"] }
+        modelProjection: { type: ["number", "null"] }
+        line: { type: ["number", "null"] }
+        edge: { type: ["number", "null"] }
+        confidence: { type: string }
+        factors:
+          type: array
+          items: { type: string }
+      required: [id, player, opponent, score, goalProbability, sogProjection, pointProbability, assistProbability, modelProjection, line, edge, confidence, factors]
+    Matchup:
+      type: object
+      properties:
+        game: { $ref: "#/components/schemas/Game" }
+        away: { $ref: "#/components/schemas/TeamProfile" }
+        home: { $ref: "#/components/schemas/TeamProfile" }
+      required: [game, away, home]
+    TeamProfile:
+      type: object
+      properties:
+        team: { $ref: "#/components/schemas/Team" }
+        offense: { type: ["number", "null"] }
+        defense: { type: ["number", "null"] }
+        goaltending: { type: ["number", "null"] }
+        powerPlay: { type: ["number", "null"] }
+        penaltyKill: { type: ["number", "null"] }
+        shotGeneration: { type: ["number", "null"] }
+        shotSuppression: { type: ["number", "null"] }
+        expectedGoals: { type: ["number", "null"] }
+      required: [team, offense, defense, goaltending, powerPlay, penaltyKill, shotGeneration, shotSuppression, expectedGoals]
+    AuditRecord:
+      type: object
+      properties:
+        id: { type: string }
+        createdAt: { type: string, format: date-time }
+        playerName: { type: string }
+        market: { type: string }
+        line: { type: ["number", "null"] }
+        projection: { type: ["number", "null"] }
+        probability: { type: ["number", "null"] }
+        confidence: { type: ["string", "null"] }
+        modelVersion: { type: string }
+        actual: { type: ["number", "null"] }
+        result:
+          type: string
+          enum: [hit, miss, pending, void]
+      required: [id, createdAt, playerName, market, line, projection, probability, confidence, modelVersion, actual, result]
+    ModelPerformance:
+      type: object
+      properties:
+        market: { type: string }
+        sampleSize: { type: integer }
+        hitRate: { type: ["number", "null"] }
+        brierScore: { type: ["number", "null"] }
+        mae: { type: ["number", "null"] }
+        rmse: { type: ["number", "null"] }
+        status: { type: string }
+      required: [market, sampleSize, hitRate, brierScore, mae, rmse, status]
 

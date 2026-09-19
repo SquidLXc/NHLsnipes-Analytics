@@ -1,0 +1,1158 @@
+Copy/paste **this entire message** into your Replit Agent. Don't let it just tweak the existing homepage — this tells it to rebuild the frontend properly while preserving the backend/data work.
+
+```text
+STOP CURRENT FRONTEND WORK.
+
+The current NHLsnipes UI is NOT acceptable. Do not continue building on the current generic dashboard styling.
+
+I need you to completely redesign/rebuild the NHLsnipes frontend into a custom, polished NHL analytics platform.
+
+IMPORTANT:
+This is NOT a request for a few CSS changes.
+This is NOT a request to change the colors.
+This is NOT a request for a new homepage only.
+
+I want the ENTIRE APPLICATION UI rebuilt around ONE consistent NHLsnipes design system.
+
+Keep all working backend, database, API, ingestion, model, prediction, and audit functionality you have already created. Replace the generic frontend presentation with the design system below.
+
+==================================================
+NHLsnipes.com — COMPLETE UI/UX REDESIGN
+==================================================
+
+BRAND:
+
+Name:
+NHLsnipes
+
+Visual identity:
+
+- Dark
+- Gritty
+- Aggressive
+- Premium sports analytics
+- Hockey/betting-terminal aesthetic
+- Neon glow
+- High information density
+- Modern but not corporate
+- No generic SaaS dashboard appearance
+- No generic blue Bootstrap dashboard
+- No boring white cards
+- No cookie-cutter admin template
+- No fake sports graphics
+
+Primary visual foundation:
+
+- Near-black background
+- Charcoal/black panels
+- Subtle textured/grain background
+- Neon green as primary accent
+- Electric purple/blue as secondary glow
+- White/light gray typography
+- Muted gray supporting text
+- Very subtle gradients
+- Thin glowing borders
+- Soft neon shadows
+- Sharp corners with slightly rounded cards where appropriate
+- Strong contrast
+
+The site should feel like a professional hockey analytics terminal.
+
+DO NOT copy DingerLab's exact branding, logo, source code, proprietary graphics, or exact UI.
+
+Dinger-style information density and analytics presentation are the inspiration.
+
+NHLsnipes needs its OWN identity.
+
+==================================================
+GLOBAL APPLICATION SHELL
+==================================================
+
+Every page must use the same application shell.
+
+Desktop:
+
+LEFT SIDEBAR:
+
+NHLsnipes logo/wordmark at top.
+
+Navigation:
+
+Dashboard
+Today's Slate
+NHL Snipes
+Props Center
+Goals
+Shots on Goal
+Points
+Assists
+Goalies
+Matchups
+Team Vulnerability
+Players
+Teams
+Watchlist
+Audit
+Model Performance
+
+Bottom:
+
+System Status
+Admin
+
+Main content area should be wide and information-dense.
+
+TOP BAR:
+
+- Date
+- NHL status
+- Data feed status
+- Search
+- Watchlist
+- User/account if applicable
+
+Mobile:
+
+Use a compact top navigation/header and bottom navigation or slide-out menu.
+
+Do not simply shrink the desktop UI.
+
+Create a purpose-built mobile layout.
+
+==================================================
+DESIGN TOKENS
+==================================================
+
+Create centralized CSS/theme variables.
+
+Example structure:
+
+--bg-primary
+--bg-secondary
+--bg-card
+--bg-card-hover
+--border
+--text-primary
+--text-secondary
+--text-muted
+--neon-green
+--neon-purple
+--neon-blue
+--danger
+--warning
+--success
+--shadow-neon
+
+Use these consistently across the entire application.
+
+Do NOT scatter random colors throughout components.
+
+==================================================
+TYPOGRAPHY
+==================================================
+
+Use a modern condensed/sports-friendly heading font if legally available through a standard web font provider.
+
+Headings should feel like sports analytics.
+
+Numbers should be highly readable.
+
+Large model numbers and probabilities should have strong visual hierarchy.
+
+Examples:
+
+82%
+4.7
+29.8
++18%
+0.72
+
+These should visually stand out.
+
+==================================================
+DASHBOARD
+==================================================
+
+The dashboard needs to look like an actual analytics command center.
+
+Top section:
+
+NHLsnipes
+TODAY'S NHL ANALYTICS
+
+Display:
+
+- Games today
+- Active player props
+- Available snipes
+- Model updates
+- Data status
+
+Then:
+
+TODAY'S SLATE
+
+Each NHL game gets a premium matchup card.
+
+Example structure:
+
+------------------------------------------------
+EDMONTON OILERS              VANCOUVER CANUCKS
+
+[TEAM CREST]                  [TEAM CREST]
+
+EDM                           VAN
+
+7:00 PM ET
+
+Projected Goals
+3.42                         2.91
+
+Projected Shots
+31.8                         29.7
+
+Goal Environment
+6.33
+
+MODEL EDGE
+------------------------------------------------
+
+Use REAL data.
+
+Never hardcode fake teams, fake games, fake statistics, or fake probabilities.
+
+==================================================
+GAME CARDS
+==================================================
+
+Build a reusable GameCard component.
+
+Props/data:
+
+game_id
+date
+start_time
+home_team
+away_team
+home_logo
+away_logo
+home_score
+away_score
+status
+projected_goals
+projected_shots
+total
+venue
+etc.
+
+Automatically use the correct teams from the database/API.
+
+==================================================
+NHL SNIPES
+==================================================
+
+This is one of the primary pages.
+
+Create a high-density analytics board.
+
+Header:
+
+NHL SNIPES
+Today's Model Edges
+
+Filters:
+
+All
+Goals
+SOG
+Points
+Assists
+Goalies
+
+Additional filters:
+
+- Team
+- Player
+- Opponent
+- Minimum edge
+- Minimum confidence
+- Game time
+
+SNIPE CARDS:
+
+Each card should display:
+
+PLAYER PHOTO
+PLAYER NAME
+TEAM CREST
+POSITION
+
+PROP
+LINE
+
+MODEL PROJECTION
+PROBABILITY
+EDGE
+CONFIDENCE
+
+Example:
+
+[PLAYER PHOTO]
+
+AUSTON MATTHEWS
+TOR • C
+
+SHOTS ON GOAL
+3.5
+
+MODEL
+4.6
+
+P(3+)
+78%
+
+EDGE
++14%
+
+HIGH CONFIDENCE
+
+The numbers above are examples of layout only.
+
+Never fabricate production values.
+
+==================================================
+PROP CENTER
+==================================================
+
+Create separate but consistent prop views for:
+
+Goals
+Shots on Goal
+Points
+Assists
+Blocks
+Hits
+Goalie Saves
+
+Every prop row/card needs:
+
+Player
+Photo
+Team
+Opponent
+Market
+Sportsbook line if odds data exists
+Model projection
+Probability
+Edge
+Confidence
+Game time
+
+If sportsbook odds are not available, explicitly show:
+
+ODDS UNAVAILABLE
+
+Do NOT invent odds.
+
+==================================================
+PLAYER CARDS
+==================================================
+
+Every player card must support:
+
+- Real player name
+- Real player photo/headshot when the permitted data provider supplies it
+- Team crest when permitted
+- Position
+- Jersey number
+- Current team
+- Opponent
+- Key statistics
+- Model values
+
+Do NOT manually hardcode hundreds of player images.
+
+Store asset URLs in the database/data model.
+
+==================================================
+PLAYER PAGE
+==================================================
+
+Create a premium player profile.
+
+Hero section:
+
+------------------------------------------------
+[REAL PLAYER PHOTO]
+
+PLAYER NAME
+TEAM
+POSITION
+#NUMBER
+
+G
+A
+P
+SOG
+TOI
+
+MODEL STATUS
+------------------------------------------------
+
+Then sections:
+
+GOAL MODEL
+
+SHOT MODEL
+
+POINT MODEL
+
+ASSIST MODEL
+
+RECENT FORM
+
+L5
+L10
+SEASON
+
+HOME/AWAY
+
+POWER PLAY
+
+MATCHUP
+
+OPPONENT
+
+GOALTENDER
+
+Historical charts.
+
+Use real data.
+
+==================================================
+GOAL MODEL PAGE
+==================================================
+
+Create a dedicated Goal Model page.
+
+Display:
+
+Player
+Photo
+Team
+Opponent
+Goals/Game
+Shooting %
+Shots/Game
+xG if available
+Recent goals
+TOI
+PP role
+Opponent defense
+Opponent goalie
+Model projection
+P(1+)
+P(2+)
+P(3+)
+Edge
+Confidence
+
+Use visually strong probability cards and charts.
+
+==================================================
+SHOTS ON GOAL PAGE
+==================================================
+
+Dedicated SOG analytics interface.
+
+Show:
+
+Season SOG/game
+L5
+L10
+Home
+Away
+Opponent SOG allowed
+Shot attempts
+TOI
+PP TOI
+Line role
+Team shot generation
+Expected pace
+
+Then:
+
+Projected SOG
+
+P(3+)
+P(4+)
+P(5+)
+P(6+)
+
+Use charts and distribution-style visualizations where appropriate.
+
+==================================================
+POINT MODEL
+==================================================
+
+Show:
+
+Projected Points
+P(1+)
+P(2+)
+P(3+)
+
+Supporting inputs:
+
+Goals
+Assists
+Primary assists
+TOI
+PP TOI
+Team expected goals
+Opponent defense
+Recent usage
+
+==================================================
+ASSIST MODEL
+==================================================
+
+Show:
+
+Projected Assists
+P(1+)
+P(2+)
+
+Supporting data:
+
+Assist rate
+Linemates
+Team scoring
+PP role
+xG
+Recent usage
+
+==================================================
+GOALIE LAB
+==================================================
+
+This needs to be visually distinct but still part of the NHLsnipes system.
+
+Goalie hero:
+
+[REAL GOALIE PHOTO]
+
+NAME
+TEAM
+
+SV%
+GAA
+Shots Faced/Game
+Recent SV%
+
+Then:
+
+PROJECTED SAVES
+
+29.8
+
+P(25+)
+P(30+)
+P(35+)
+
+Also show:
+
+Projected Shots Against
+Projected Goals Against
+Projected SV%
+Rest
+Back-to-back status
+Home/Away
+Opponent shot generation
+
+Never fabricate goalie information.
+
+==================================================
+MATCHUP LAB
+==================================================
+
+Create visual team-vs-team matchup screens.
+
+Example:
+
+EDMONTON                  VANCOUVER
+
+[CREST]                    [CREST]
+
+OFFENSE
+SHOT GENERATION
+GOAL GENERATION
+POWER PLAY
+PENALTY KILL
+DEFENSE
+GOALTENDING
+PACE
+
+Show objective numerical comparisons.
+
+Use bars, charts, and comparison panels.
+
+No subjective language such as "this team is awesome."
+
+==================================================
+TEAM VULNERABILITY
+==================================================
+
+Create an analytics table/page showing where teams allow production.
+
+Categories:
+
+Goals allowed
+Shots allowed
+Points allowed
+Assists allowed
+SOG allowed
+Blocks allowed
+Hits allowed
+Goalie saves environment
+Power play
+Penalty kill
+
+Use opponent/team statistics from the database.
+
+==================================================
+TEAM PAGES
+==================================================
+
+Every team page needs:
+
+REAL TEAM NAME
+REAL TEAM ABBREVIATION
+TEAM CREST/LOGO FROM A PERMITTED SOURCE
+
+Team overview.
+
+Roster.
+
+Forwards.
+
+Defense.
+
+Goalies.
+
+Schedule.
+
+Recent results.
+
+Team statistics.
+
+Offensive metrics.
+
+Defensive metrics.
+
+Special teams.
+
+Player production.
+
+Matchups.
+
+==================================================
+PLAYERS PAGE
+==================================================
+
+Create a searchable player directory.
+
+Columns/cards:
+
+Photo
+Player
+Team
+Position
+GP
+G
+A
+P
+SOG
+TOI
+
+Filters:
+
+Team
+Position
+Conference
+Division
+
+Search must actually work.
+
+==================================================
+TEAMS PAGE
+==================================================
+
+Create a team directory with:
+
+Team crest
+Team name
+Abbreviation
+Conference
+Division
+Record
+Goals/game
+Goals allowed/game
+SOG/game
+SOG allowed/game
+
+Use real database values.
+
+==================================================
+WATCHLIST
+==================================================
+
+Allow users to save:
+
+Players
+Teams
+Snipes
+Props
+
+Use the same visual system.
+
+==================================================
+AUDIT PAGE
+==================================================
+
+This needs to look like a real model audit system.
+
+Show:
+
+Prediction ID
+Timestamp
+Game
+Player
+Market
+Line
+Model projection
+Probability
+Confidence
+Model version
+Result
+Hit/Miss
+
+Never rewrite historical predictions.
+
+==================================================
+MODEL PERFORMANCE
+==================================================
+
+Display model performance objectively.
+
+Metrics:
+
+Sample size
+Hit rate
+Brier score
+Calibration
+MAE
+RMSE
+
+ROI only if actual historical odds were captured.
+
+Never display fake performance.
+
+Do not advertise model accuracy based on tiny samples.
+
+==================================================
+DATA STATUS
+==================================================
+
+Create a highly visible data status indicator.
+
+LIVE DATA
+SYNCING
+STALE DATA
+DATA FEED OFFLINE
+DATA UNAVAILABLE
+
+If the API/data provider fails:
+
+DO NOT substitute fake/random numbers.
+
+Show the appropriate unavailable state.
+
+==================================================
+REAL NHL DATA
+==================================================
+
+The frontend must be completely data-driven.
+
+Do NOT hardcode:
+
+teams
+players
+games
+scores
+statistics
+odds
+probabilities
+model outputs
+
+All production values must come from the backend/database/provider adapters.
+
+Create a canonical team/player identity system.
+
+Team IDs must be consistent throughout:
+
+games
+players
+rosters
+stats
+predictions
+matchups
+props
+
+Do not create duplicate team/player records due to name variations.
+
+==================================================
+TEAM LOGOS AND PLAYER PHOTOS
+==================================================
+
+The UI MUST support real team crests/logos and real player photos.
+
+However:
+
+DO NOT blindly scrape or redistribute copyrighted NHL assets.
+
+Use a permitted/licensed/authorized source where required.
+
+Create an asset abstraction:
+
+team.logo_url
+player.headshot_url
+
+If an asset isn't available, use a tasteful NHLsnipes placeholder rather than a broken image.
+
+Do NOT use random stock hockey players.
+
+==================================================
+CHARTS
+==================================================
+
+Charts should match the NHLsnipes aesthetic.
+
+Required chart types where useful:
+
+- Recent game trends
+- L5/L10/season comparisons
+- SOG distribution
+- Goal probability
+- Point probability
+- Goalie saves
+- Home/away splits
+- Opponent splits
+- Model projection vs actual
+
+Charts should be clean, dark, readable, and responsive.
+
+==================================================
+TABLES
+==================================================
+
+Tables should look like analytics terminals.
+
+Dark background.
+
+Subtle borders.
+
+Compact rows.
+
+Strong numeric hierarchy.
+
+Hover state.
+
+Sticky headers where appropriate.
+
+Responsive mobile behavior.
+
+Do NOT use default browser tables.
+
+==================================================
+ANIMATIONS
+==================================================
+
+Use subtle animations only.
+
+Examples:
+
+- Neon hover glow
+- Card hover elevation
+- Number transitions
+- Loading shimmer
+- Page transitions
+
+Do NOT make the site look like a gaming casino UI.
+
+The goal is:
+
+GRITTY SPORTS ANALYTICS
+
+not:
+
+cheap casino website.
+
+==================================================
+LOADING STATES
+==================================================
+
+Every major data component needs a proper loading state.
+
+Use skeleton loaders.
+
+Do not show empty white boxes.
+
+==================================================
+ERROR STATES
+==================================================
+
+Every major data component needs an error state.
+
+Examples:
+
+DATA UNAVAILABLE
+Unable to retrieve current NHL data.
+
+Try again.
+
+No fake fallback numbers.
+
+==================================================
+EMPTY STATES
+==================================================
+
+Example:
+
+NO SNIPES AVAILABLE
+
+There are currently no model edges meeting your selected filters.
+
+==================================================
+RESPONSIVE DESIGN
+==================================================
+
+Desktop:
+Dense professional analytics dashboard.
+
+Tablet:
+Reflow cards and tables.
+
+Mobile:
+Purpose-built mobile UI.
+
+Player cards must remain usable.
+
+Game cards must remain usable.
+
+Prop cards must remain usable.
+
+Charts must resize.
+
+No horizontal page overflow.
+
+==================================================
+ACCESSIBILITY
+==================================================
+
+Use:
+
+semantic HTML
+keyboard navigation
+proper contrast
+alt text
+ARIA labels where necessary
+visible focus states
+
+==================================================
+PERFORMANCE
+==================================================
+
+Do not load every player photo on the entire application at once.
+
+Use:
+
+lazy loading
+image sizing
+caching
+code splitting
+pagination
+virtualized lists where appropriate
+
+Optimize charts and large datasets.
+
+==================================================
+REAL DATA RULE
+==================================================
+
+THIS IS CRITICAL.
+
+Never use fake production data.
+
+No:
+
+Math.random()
+fake players
+fake games
+fake odds
+fake predictions
+fake team statistics
+fake model percentages
+
+Demo/seed data is allowed ONLY when clearly marked as development/demo data and must never appear in production.
+
+If the real data feed is unavailable:
+
+SHOW DATA UNAVAILABLE.
+
+==================================================
+DO NOT BREAK THE BACKEND
+==================================================
+
+Before changing frontend code:
+
+1. Inspect the current repository.
+2. Identify the existing backend/API/database/model architecture.
+3. Preserve working functionality.
+4. Identify what is incomplete.
+5. Rebuild the frontend against the actual API contracts.
+
+Do not create a beautiful frontend disconnected from the backend.
+
+==================================================
+REUSABLE COMPONENT ARCHITECTURE
+==================================================
+
+Create reusable components such as:
+
+AppShell
+Sidebar
+TopBar
+MobileNavigation
+PageHeader
+GameCard
+TeamBadge
+PlayerPhoto
+PlayerCard
+PlayerHero
+PropCard
+SnipeCard
+ProbabilityCard
+ConfidenceBadge
+StatCard
+StatTable
+TrendChart
+MatchupCard
+MatchupComparison
+GoalieCard
+ModelPanel
+ModelInputPanel
+DataStatus
+LoadingSkeleton
+ErrorState
+EmptyState
+FilterBar
+SearchBar
+DateSelector
+AuditTable
+
+All pages must use these components rather than independently inventing their own styling.
+
+==================================================
+NO GENERIC TEMPLATE
+==================================================
+
+I specifically reject:
+
+generic admin dashboards
+generic SaaS layouts
+generic blue cards
+default Tailwind dashboards
+default Bootstrap styling
+white backgrounds
+cookie-cutter analytics templates
+placeholder sports imagery
+fake NHL data
+
+The finished product needs to immediately look like:
+
+"NHLsnipes — a serious hockey analytics platform."
+
+==================================================
+VISUAL QUALITY BAR
+==================================================
+
+Before declaring this complete, inspect every major page visually.
+
+Check:
+
+Dashboard
+Today's Slate
+NHL Snipes
+Props
+Goals
+SOG
+Points
+Assists
+Goalies
+Matchups
+Team Vulnerability
+Players
+Teams
+Player Profile
+Team Profile
+Watchlist
+Audit
+Model Performance
+Admin
+
+Every page must look like it belongs to the SAME application.
+
+There should be no page where the user can tell:
+
+"this page was generated from a different template."
+
+==================================================
+IMPORTANT
+==================================================
+
+Do NOT just tell me how to improve the UI.
+
+Actually implement it.
+
+Do NOT return a design proposal.
+
+Do NOT create a mockup.
+
+Modify the actual application.
+
+Do NOT stop after changing the homepage.
+
+Rebuild the complete frontend.
+
+After implementation:
+
+1. Run the application.
+2. Verify the build.
+3. Verify all routes.
+4. Verify API data binding.
+5. Verify responsive layouts.
+6. Verify no fake production data.
+7. Verify images/assets fail gracefully.
+8. Verify no console errors.
+9. Verify no broken links/routes.
+10. Verify all existing backend functionality still works.
+
+If you need to make architectural changes to support this UI, make them.
+
+If an API does not provide something required by the UI, do NOT fabricate it. Clearly identify the missing data field/source and keep the UI in an unavailable state until a legitimate source is connected.
+
+The goal is a REAL, production-ready NHL analytics website at NHLsnipes.com with a completely custom gritty neon NHLsnipes visual identity.
+
+BUILD IT NOW.
+```

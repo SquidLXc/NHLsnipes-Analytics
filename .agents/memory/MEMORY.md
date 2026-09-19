@@ -1,0 +1,1 @@
+- [Browser verification](browser-verification.md) — typechecks and builds do not catch preview-only React/runtime failures; always verify the running artifact visually before handoff.
