@@ -57,11 +57,13 @@ function time(value: string | null | undefined) {
   return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(new Date(value));
 }
 function DataState({ state, message, compact = false }: { state?: string; message?: string; compact?: boolean }) {
-  const live = state === 'live';
+  const preseason = state === 'partial' && message?.includes('no verified games');
+  const live = state === 'live' || preseason;
+  const label = preseason ? 'preseason' : state || 'unknown';
   return (
     <div data-testid="status-data-state" className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-mono uppercase tracking-[.16em] ${live ? 'border-primary/30 bg-primary/10 text-primary' : 'border-accent/30 bg-accent/10 text-accent'}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${live ? 'bg-primary shadow-[0_0_10px_hsl(var(--primary))]' : 'bg-accent'}`} />
-      {state || 'unknown'} {compact ? '' : `· ${message || 'Feed status'}`}
+      {label} {compact ? '' : `· ${message || 'Feed status'}`}
     </div>
   );
 }
@@ -290,7 +292,7 @@ function StatTable({ title, lines }: { title: string; lines: { label: string; ga
 function TeamsPage() {
   const query = useGetTeams({ query: { queryKey: getGetTeamsQueryKey() } });
   const rows = (query.data as Team[] | undefined) || [];
-  return <><PageHeader eyebrow="Team index / vulnerability" title="Teams" copy="A quick map of team profiles, vulnerabilities and the environments that shape tonight's markets." /><QueryState loading={query.isLoading} error={query.isError} empty={!query.isLoading && !query.isError && rows.length === 0} onRetry={() => query.refetch()}><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{rows.map((team) => <Link data-testid={`card-team-${team.id}`} href={`/teams/${team.id}`} key={team.id} className="group rounded-xl border border-border bg-card/70 p-4 hover:border-accent/40"><div className="flex items-center gap-3"><TeamMark team={team} /><div className="min-w-0 flex-1"><p className="text-sm font-bold group-hover:text-primary">{team.name}</p><p className="mt-1 text-[10px] text-muted-foreground">{team.conference || 'Conference unavailable'} · {team.division || 'Division unavailable'}</p></div><ChevronRight size={15} className="text-muted-foreground group-hover:text-accent" /></div><div className="mt-4 flex items-center justify-between border-t border-border pt-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground"><span>{team.abbreviation}</span><span>{team.primaryColor ? 'profile ready' : 'partial profile'}</span></div></Link>)}</div></QueryState></>;
+  return <><PageHeader eyebrow="Team index / vulnerability" title="Teams" copy="A quick map of team profiles, vulnerabilities and the environments that shape tonight's markets." /><QueryState loading={query.isLoading} error={query.isError} empty={!query.isLoading && !query.isError && rows.length === 0} onRetry={() => query.refetch()}><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{rows.map((team) => <Link data-testid={`card-team-${team.id}`} href={`/teams/${team.id}`} key={team.id} className="group rounded-xl border border-border bg-card/70 p-4 hover:border-accent/40"><div className="flex items-center gap-3"><TeamMark team={team} /><div className="min-w-0 flex-1"><p className="text-sm font-bold group-hover:text-primary">{team.name}</p><p className="mt-1 text-[10px] text-muted-foreground">{team.conference || 'Conference unavailable'} · {team.division || 'Division unavailable'}</p></div><ChevronRight size={15} className="text-muted-foreground group-hover:text-accent" /></div><div className="mt-4 flex items-center justify-between border-t border-border pt-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground"><span>{team.abbreviation}</span><span>{team.logoUrl ? 'identity ready' : 'identity partial'}</span></div></Link>)}</div></QueryState></>;
 }
 
 function TeamDetailPage() {
