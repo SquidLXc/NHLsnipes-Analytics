@@ -6,18 +6,18 @@ import {
   Search, Shield, SlidersHorizontal, Sparkles, Star, Target, TrendingUp, Trophy, Users, X, Zap
 } from 'lucide-react';
 import {
-  getGetAuditQueryKey, getGetDashboardSummaryQueryKey, getGetFutureGamesQueryKey, getGetGameQueryKey, getGetGamesQueryKey,
+  getGetAuditQueryKey, getGetDashboardSummaryQueryKey, getGetFutureGamesQueryKey, getGetGameQueryKey, getGetGamesQueryKey, getGetMatchupQueryKey,
   getGetGoaliesQueryKey, getGetMatchupsQueryKey, getGetModelPerformanceQueryKey,
   getGetPlayerQueryKey, getGetPlayersQueryKey, getGetPropsByMarketQueryKey, getGetPropsQueryKey,
   getGetSnipesQueryKey, getGetTeamQueryKey, getGetTeamsQueryKey, getGetTodayGamesQueryKey,
   getHealthCheckQueryKey, useHealthCheck, useGetAudit, useGetDashboardSummary, useGetGame,
-  useGetFutureGames, useGetGames, useGetGoalies, useGetMatchups, useGetPlayer, useGetPlayers, useGetProps,
+  useGetFutureGames, useGetGames, useGetGoalies, useGetMatchup, useGetMatchups, useGetPlayer, useGetPlayers, useGetProps,
   useGetPropsByMarket, useGetSnipes, useGetTeam, useGetTeams, useGetTodayGames,
   useGetModelPerformance
 } from '@workspace/api-client-react';
 import { useDataHealth } from '@/lib/api-hooks';
 import type {
-  AuditRecord, DashboardSummary, Game, Goalie, Matchup, ModelPerformance, Player, PlayerDetail,
+  AuditRecord, DashboardSummary, Game, Goalie, Matchup, MatchupDetail, MatchupPlayer, ModelPerformance, Player, PlayerDetail,
   Prop, Snipe, Team, TeamDetail
 } from '@workspace/api-client-react';
 import { PlayerImage, TeamCrest } from '@/components/assets';
@@ -167,11 +167,61 @@ function PropCard({ prop }: { prop: Prop }) {
 }
 
 function MatchupsPage() {
+  const [location] = useLocation();
+  const selectedGameId = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    return new URLSearchParams(window.location.search).get('game') || '';
+  }, [location]);
   const query = useGetMatchups({ query: { queryKey: getGetMatchupsQueryKey() } });
   const gamesQuery = useGetGames(undefined, { query: { queryKey: getGetGamesQueryKey() } });
+  const selectedQuery = useGetMatchup(selectedGameId, {
+    query: { enabled: Boolean(selectedGameId), queryKey: getGetMatchupQueryKey(selectedGameId) },
+  });
   const rows = (query.data as Matchup[] | undefined) || [];
+  const selected = selectedQuery.data as MatchupDetail | undefined;
+  if (selectedGameId) {
+    return <><PageHeader eyebrow="Matchup lab / player context" title={selected ? `${selected.game.awayTeam.abbreviation} at ${selected.game.homeTeam.abbreviation}` : 'Selected matchup'} copy="Both rosters are loaded for this game. Season stats stay attached to the players that are available from the NHL feed." action={<Link href="/matchups" className="rounded-lg border border-border px-3 py-2 text-xs font-semibold hover:border-primary/40 hover:text-primary">All matchups</Link>} /><QueryState loading={selectedQuery.isLoading} error={selectedQuery.isError} empty={!selectedQuery.isLoading && !selectedQuery.isError && !selected} onRetry={() => selectedQuery.refetch()}>{selected && <SelectedMatchup matchup={selected} />}</QueryState></>;
+  }
   return <><PageHeader eyebrow="Matchup lab / environment" title="Matchups" copy="Read the game environment before you read the player market: pace, special teams, goaltending and shot creation." action={<span data-testid="text-games-indexed" className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{gamesQuery.data ? `${(gamesQuery.data as Game[]).length} games indexed` : 'Index pending'}</span>} /><QueryState loading={query.isLoading} error={query.isError} empty={!query.isLoading && !query.isError && rows.length === 0} onRetry={() => query.refetch()}><div className="grid gap-4 lg:grid-cols-2">{rows.map((matchup) => <MatchupCard key={matchup.game.id} matchup={matchup} />)}</div></QueryState></>;
 }
+
+function SelectedMatchup({ matchup }: { matchup: MatchupDetail }) {
+  const { game, away, home } = matchup;
+  return <div className="space-y-6">
+    <section className="signal-shadow rounded-xl border border-border bg-card/70 p-5 md:p-6">
+      <div className="mb-6 flex items-center justify-between">
+        <span className="font-mono text-[10px] uppercase tracking-[.14em] text-muted-foreground">{shortDate(game.gameDate)} · {time(game.gameDate)}</span>
+        <span className={`rounded-full px-2 py-1 text-[9px] uppercase ${game.status === 'live' ? 'bg-accent/10 text-accent' : 'bg-muted text-muted-foreground'}`}>{game.status}</span>
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-1 flex-col items-center gap-2"><TeamMark team={away.team} size="lg" /><p className="text-sm font-bold">{away.team.name}</p><p className="font-mono text-xs text-muted-foreground">away</p></div>
+        <div className="text-center"><div className="font-mono text-2xl font-medium text-secondary">{fmt(game.matchupScore)}</div><div className="mt-1 text-[9px] uppercase tracking-widest text-muted-foreground">matchup score</div></div>
+        <div className="flex flex-1 flex-col items-center gap-2"><TeamMark team={home.team} size="lg" /><p className="text-sm font-bold">{home.team.name}</p><p className="font-mono text-xs text-muted-foreground">home</p></div>
+      </div>
+      <div className="mt-6 grid grid-cols-2 gap-2 border-t border-border pt-4 md:grid-cols-4">{[['Goal env.', game.goalEnvironment], ['Shot env.', game.shotEnvironment], ['PP edge', game.powerPlayEdge], ['Goalie', game.goaltendingEdge]].map(([label, value]) => <div key={String(label)} className="text-center"><p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{label}</p><p className="mt-1 text-sm font-bold">{fmt(value as number | null)}</p></div>)}</div>
+    </section>
+    <div className="grid gap-6 xl:grid-cols-2">
+      <RosterStats team={away.team} players={away.players} side="Away" />
+      <RosterStats team={home.team} players={home.players} side="Home" />
+    </div>
+  </div>;
+}
+
+function RosterStats({ team, players, side }: { team: Team; players: MatchupPlayer[]; side: string }) {
+  return <section data-testid={`section-roster-${team.abbreviation}`} className="rounded-xl border border-border bg-card/70 p-5 md:p-6">
+    <div className="mb-5 flex items-center justify-between"><div className="flex items-center gap-3"><TeamMark team={team} size="md" /><div><p className="font-mono text-[10px] uppercase tracking-[.16em] text-primary">{side} roster</p><h2 className="mt-1 text-lg font-bold">{team.name}</h2></div></div><span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{players.length} players</span></div>
+    {players.length ? <div className="space-y-2">{players.map((player) => <MatchupPlayerCard key={player.id} player={player} />)}</div> : <EmptyState title="Roster unavailable" body="No players were returned for this team." icon={Users} />}
+  </section>;
+}
+
+function MatchupPlayerCard({ player }: { player: MatchupPlayer }) {
+  const stats = player.seasonStats;
+  return <div data-testid={`card-matchup-player-${player.id}`} className="grid gap-3 rounded-lg border border-border/70 bg-muted/30 p-3 sm:grid-cols-[1fr_auto] sm:items-center">
+    <div className="flex min-w-0 items-center gap-3"><PlayerImage player={player} size="sm" /><div className="min-w-0"><Link href={`/players/${player.id}`} className="truncate text-sm font-bold hover:text-primary">{player.fullName}</Link><p className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">{player.position} · #{player.jerseyNumber ?? '—'}</p></div></div>
+    {stats ? <div className="grid grid-cols-5 gap-3 text-center"><div><p className="font-mono text-[9px] text-muted-foreground">GP</p><p className="mt-1 text-xs font-bold">{stats.games}</p></div><div><p className="font-mono text-[9px] text-muted-foreground">G</p><p className="mt-1 text-xs font-bold">{stats.goals}</p></div><div><p className="font-mono text-[9px] text-muted-foreground">A</p><p className="mt-1 text-xs font-bold">{stats.assists}</p></div><div><p className="font-mono text-[9px] text-muted-foreground">PTS</p><p className="mt-1 text-xs font-bold text-primary">{stats.points}</p></div><div><p className="font-mono text-[9px] text-muted-foreground">SOG</p><p className="mt-1 text-xs font-bold">{stats.sog}</p></div></div> : <span className="text-right text-[10px] text-muted-foreground">Stats unavailable</span>}
+  </div>;
+}
+
 function MatchupCard({ matchup }: { matchup: Matchup }) {
   const { game, away, home } = matchup;
   const score = game.matchupScore;

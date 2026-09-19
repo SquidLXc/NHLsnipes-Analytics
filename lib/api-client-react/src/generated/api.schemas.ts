@@ -268,6 +268,21 @@ export interface Matchup {
   home: TeamProfile;
 }
 
+export type MatchupPlayer = Player & ({
+  seasonStats: StatLine | null;
+});
+
+export interface MatchupTeam {
+  team: Team;
+  players: MatchupPlayer[];
+}
+
+export interface MatchupDetail {
+  game: Game;
+  away: MatchupTeam;
+  home: MatchupTeam;
+}
+
 export type AuditRecordResult = typeof AuditRecordResult[keyof typeof AuditRecordResult];
 
 

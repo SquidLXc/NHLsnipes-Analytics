@@ -4,6 +4,7 @@ import {
   GetGameResponse,
   GetGamesResponse,
   GetGoaliesResponse,
+  GetMatchupResponse,
   GetMatchupsResponse,
   GetModelPerformanceResponse,
   GetPlayerResponse,
@@ -21,6 +22,7 @@ export type ProviderData = {
   dashboard: z.infer<typeof GetDashboardSummaryResponse>;
   games: z.infer<typeof GetGamesResponse>;
   game: z.infer<typeof GetGameResponse>;
+  matchup: z.infer<typeof GetMatchupResponse>;
   players: z.infer<typeof GetPlayersResponse>;
   player: z.infer<typeof GetPlayerResponse>;
   teams: z.infer<typeof GetTeamsResponse>;
@@ -65,6 +67,7 @@ export interface NhlDataProvider {
   getGames(date?: string): Promise<ProviderData["games"]>;
   getFutureGames(): Promise<ProviderData["games"]>;
   getGame(gameId: string): Promise<ProviderData["game"] | null>;
+  getMatchup(gameId: string): Promise<ProviderData["matchup"] | null>;
   getPlayers(search?: string, team?: string): Promise<ProviderData["players"]>;
   getPlayer(playerId: string): Promise<ProviderData["player"] | null>;
   getTeams(): Promise<ProviderData["teams"]>;
@@ -292,6 +295,33 @@ class NhlWebApiProvider implements NhlDataProvider {
   async getGame(gameId: string) {
     const raw = await this.fetchJson<RawGame>(`gamecenter/${encodeURIComponent(gameId)}/landing`);
     return GetGameResponse.parse({ ...gameFromRaw(raw), notes: [] });
+  }
+
+  async getMatchup(gameId: string) {
+    const game = await this.getGame(gameId);
+    if (!game) return null;
+    const loadRosterStats = async (team: NormalizedTeam) => {
+      const roster = await this.getPlayers(undefined, team.abbreviation);
+      return Promise.all(
+        roster.map(async (player) => {
+          try {
+            const detail = await this.getPlayer(player.id);
+            return { ...player, seasonStats: detail?.seasonStats ?? null };
+          } catch {
+            return { ...player, seasonStats: null };
+          }
+        }),
+      );
+    };
+    const [awayPlayers, homePlayers] = await Promise.all([
+      loadRosterStats(game.awayTeam),
+      loadRosterStats(game.homeTeam),
+    ]);
+    return GetMatchupResponse.parse({
+      game,
+      away: { team: game.awayTeam, players: awayPlayers },
+      home: { team: game.homeTeam, players: homePlayers },
+    });
   }
 
   async getPlayers(search?: string, team?: string) {

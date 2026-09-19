@@ -625,6 +625,141 @@ export const GetMatchupsResponse = zod.array(GetMatchupsResponseItem)
 
 
 /**
+ * @summary Get a matchup with both team rosters and player stats
+ */
+export const GetMatchupParams = zod.object({
+  "gameId": zod.coerce.string()
+})
+
+export const GetMatchupResponse = zod.object({
+  "game": zod.object({
+  "id": zod.string(),
+  "gameDate": zod.coerce.date(),
+  "awayTeam": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "city": zod.string().nullable(),
+  "abbreviation": zod.string(),
+  "conference": zod.string().nullable(),
+  "division": zod.string().nullable(),
+  "logoUrl": zod.string().url().nullable(),
+  "primaryColor": zod.string().nullable(),
+  "secondaryColor": zod.string().nullable()
+}),
+  "homeTeam": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "city": zod.string().nullable(),
+  "abbreviation": zod.string(),
+  "conference": zod.string().nullable(),
+  "division": zod.string().nullable(),
+  "logoUrl": zod.string().url().nullable(),
+  "primaryColor": zod.string().nullable(),
+  "secondaryColor": zod.string().nullable()
+}),
+  "venue": zod.string().nullable(),
+  "status": zod.enum(['scheduled', 'live', 'final', 'postponed', 'unknown']),
+  "statusDetail": zod.string().nullable(),
+  "matchupScore": zod.number().nullable(),
+  "goalEnvironment": zod.number().nullable(),
+  "shotEnvironment": zod.number().nullable(),
+  "powerPlayEdge": zod.number().nullable(),
+  "goaltendingEdge": zod.number().nullable()
+}),
+  "away": zod.object({
+  "team": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "city": zod.string().nullable(),
+  "abbreviation": zod.string(),
+  "conference": zod.string().nullable(),
+  "division": zod.string().nullable(),
+  "logoUrl": zod.string().url().nullable(),
+  "primaryColor": zod.string().nullable(),
+  "secondaryColor": zod.string().nullable()
+}),
+  "players": zod.array(zod.object({
+  "id": zod.string(),
+  "fullName": zod.string(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "teamId": zod.string(),
+  "team": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "city": zod.string().nullable(),
+  "abbreviation": zod.string(),
+  "conference": zod.string().nullable(),
+  "division": zod.string().nullable(),
+  "logoUrl": zod.string().url().nullable(),
+  "primaryColor": zod.string().nullable(),
+  "secondaryColor": zod.string().nullable()
+}),
+  "position": zod.string(),
+  "jerseyNumber": zod.number().int().nullable(),
+  "headshotUrl": zod.string().url().nullable()
+}).and(zod.object({
+  "seasonStats": zod.union([zod.object({
+  "label": zod.string(),
+  "games": zod.number().int(),
+  "goals": zod.number(),
+  "sog": zod.number(),
+  "points": zod.number(),
+  "assists": zod.number(),
+  "toi": zod.number(),
+  "ppToi": zod.number()
+}),zod.null()])
+})))
+}),
+  "home": zod.object({
+  "team": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "city": zod.string().nullable(),
+  "abbreviation": zod.string(),
+  "conference": zod.string().nullable(),
+  "division": zod.string().nullable(),
+  "logoUrl": zod.string().url().nullable(),
+  "primaryColor": zod.string().nullable(),
+  "secondaryColor": zod.string().nullable()
+}),
+  "players": zod.array(zod.object({
+  "id": zod.string(),
+  "fullName": zod.string(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "teamId": zod.string(),
+  "team": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "city": zod.string().nullable(),
+  "abbreviation": zod.string(),
+  "conference": zod.string().nullable(),
+  "division": zod.string().nullable(),
+  "logoUrl": zod.string().url().nullable(),
+  "primaryColor": zod.string().nullable(),
+  "secondaryColor": zod.string().nullable()
+}),
+  "position": zod.string(),
+  "jerseyNumber": zod.number().int().nullable(),
+  "headshotUrl": zod.string().url().nullable()
+}).and(zod.object({
+  "seasonStats": zod.union([zod.object({
+  "label": zod.string(),
+  "games": zod.number().int(),
+  "goals": zod.number(),
+  "sog": zod.number(),
+  "points": zod.number(),
+  "assists": zod.number(),
+  "toi": zod.number(),
+  "ppToi": zod.number()
+}),zod.null()])
+})))
+})
+})
+
+
+/**
  * @summary List player snipes
  */
 export const GetSnipesQueryParams = zod.object({

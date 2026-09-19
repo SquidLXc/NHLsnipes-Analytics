@@ -226,6 +226,22 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Matchup"
+  /matchups/{gameId}:
+    get:
+      operationId: getMatchup
+      tags: [analytics]
+      summary: Get a matchup with both team rosters and player stats
+      parameters:
+        - $ref: "#/components/parameters/GameId"
+      responses:
+        "200":
+          description: Matchup detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchupDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /snipes:
     get:
       operationId: getSnipes
@@ -542,6 +558,32 @@ components:
         game: { $ref: "#/components/schemas/Game" }
         away: { $ref: "#/components/schemas/TeamProfile" }
         home: { $ref: "#/components/schemas/TeamProfile" }
+      required: [game, away, home]
+    MatchupPlayer:
+      allOf:
+        - $ref: "#/components/schemas/Player"
+        - type: object
+          properties:
+            seasonStats:
+              oneOf:
+                - $ref: "#/components/schemas/StatLine"
+                - type: "null"
+          required: [seasonStats]
+    MatchupTeam:
+      type: object
+      properties:
+        team: { $ref: "#/components/schemas/Team" }
+        players:
+          type: array
+          items:
+            $ref: "#/components/schemas/MatchupPlayer"
+      required: [team, players]
+    MatchupDetail:
+      type: object
+      properties:
+        game: { $ref: "#/components/schemas/Game" }
+        away: { $ref: "#/components/schemas/MatchupTeam" }
+        home: { $ref: "#/components/schemas/MatchupTeam" }
       required: [game, away, home]
     TeamProfile:
       type: object

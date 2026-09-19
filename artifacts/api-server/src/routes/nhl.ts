@@ -147,6 +147,19 @@ router.get("/matchups", async (_req, res) => {
   }
 });
 
+router.get("/matchups/:gameId", async (req, res) => {
+  try {
+    const matchup = await getNhlProvider().getMatchup(req.params.gameId);
+    if (!matchup) {
+      res.status(404).json({ error: "Matchup not found", code: "MATCHUP_NOT_FOUND" });
+      return;
+    }
+    res.json(matchup);
+  } catch (error) {
+    handleProviderError(res, error);
+  }
+});
+
 router.get("/snipes", async (req, res) => {
   try {
     const query = GetSnipesQueryParams.parse(req.query);

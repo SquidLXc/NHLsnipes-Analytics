@@ -27,6 +27,7 @@ import type {
   Goalie,
   HealthStatus,
   Matchup,
+  MatchupDetail,
   ModelPerformance,
   NotFoundResponse,
   Player,
@@ -1152,6 +1153,83 @@ export function useGetMatchups<TData = Awaited<ReturnType<typeof getMatchups>>, 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetMatchupsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetMatchupUrl = (gameId: string,) => {
+
+
+
+
+  return `/api/matchups/${gameId}`
+}
+
+/**
+ * @summary Get a matchup with both team rosters and player stats
+ */
+export const getMatchup = async (gameId: string, options?: Parameters<typeof customFetch>[1]): Promise<MatchupDetail> => {
+
+  return customFetch<MatchupDetail>(getGetMatchupUrl(gameId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMatchupQueryKey = (gameId: string,) => {
+    return [
+    `/api/matchups/${gameId}`
+    ] as const;
+    }
+
+
+export const getGetMatchupQueryOptions = <TData = Awaited<ReturnType<typeof getMatchup>>, TError = ErrorType<NotFoundResponse>>(gameId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMatchup>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMatchupQueryKey(gameId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMatchup>>> = ({ signal }) => getMatchup(gameId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: gameId !== null && gameId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMatchup>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMatchupQueryResult = NonNullable<Awaited<ReturnType<typeof getMatchup>>>
+export type GetMatchupQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Get a matchup with both team rosters and player stats
+ */
+
+export function useGetMatchup<TData = Awaited<ReturnType<typeof getMatchup>>, TError = ErrorType<NotFoundResponse>>(
+ gameId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMatchup>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMatchupQueryOptions(gameId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
