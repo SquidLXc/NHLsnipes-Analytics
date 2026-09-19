@@ -7,6 +7,7 @@ import {
   GetMatchupResponse,
   GetMatchupsResponse,
   GetModelPerformanceResponse,
+  GetOddsResponse,
   GetPlayerResponse,
   GetPlayersResponse,
   GetPropsByMarketResponse,
@@ -31,6 +32,7 @@ export type ProviderData = {
   props: z.infer<typeof GetPropsResponse>;
   propsByMarket: z.infer<typeof GetPropsByMarketResponse>;
   matchups: z.infer<typeof GetMatchupsResponse>;
+  odds: z.infer<typeof GetOddsResponse>;
   snipes: z.infer<typeof GetSnipesResponse>;
   audit: z.infer<typeof GetAuditResponse>;
   performance: z.infer<typeof GetModelPerformanceResponse>;
@@ -76,6 +78,7 @@ export interface NhlDataProvider {
   getProps(market?: string): Promise<ProviderData["props"]>;
   getPropsByMarket(market: string): Promise<ProviderData["propsByMarket"]>;
   getMatchups(): Promise<ProviderData["matchups"]>;
+  getOdds(): Promise<ProviderData["odds"]>;
   getSnipes(market?: string): Promise<ProviderData["snipes"]>;
   getAudit(): Promise<ProviderData["audit"]>;
   getPerformance(): Promise<ProviderData["performance"]>;
@@ -107,6 +110,21 @@ type RawGame = {
   gameState?: string;
   awayTeam: RawTeam & { score?: number };
   homeTeam: RawTeam & { score?: number };
+};
+type RawOddsEvent = {
+  id: string;
+  commence_time?: string;
+  home_team?: string;
+  away_team?: string;
+  bookmakers?: Array<{
+    key?: string;
+    title?: string;
+    last_update?: string;
+    markets?: Array<{
+      key?: string;
+      outcomes?: Array<{ name?: string; price?: number; point?: number }>;
+    }>;
+  }>;
 };
 type RawPlayer = {
   id: number;
@@ -142,9 +160,14 @@ const syncHealth: DataHealth = {
 const teamCache = new Map<string, ProviderData["teams"][number]>();
 let playersCache: ProviderData["players"] | null = null;
 let playersCacheAt = 0;
+let oddsCache: { expiresAt: number; data: ProviderData["odds"] } | null = null;
 
 function text(value: string | undefined, fallback: string) {
   return value?.trim() || fallback;
+}
+
+function canonicalTeamName(value: string) {
+  return value.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/[^a-z0-9]/g, "");
 }
 
 function assetUrl(value?: string) {
@@ -443,6 +466,49 @@ class NhlWebApiProvider implements NhlDataProvider {
     );
   }
 
+  async getOdds() {
+    const apiKey = process.env.ODDS_API_KEY;
+    if (!apiKey) return GetOddsResponse.parse({ provider: "The Odds API", configured: false, lastUpdated: null, games: [] });
+    if (oddsCache && oddsCache.expiresAt > Date.now()) return oddsCache.data;
+
+    const url = new URL("https://api.the-odds-api.com/v4/sports/icehockey_nhl/odds");
+    url.searchParams.set("apiKey", apiKey);
+    url.searchParams.set("regions", "us");
+    url.searchParams.set("markets", "h2h,spreads,totals");
+    url.searchParams.set("oddsFormat", "american");
+    const response = await fetch(url, { headers: { accept: "application/json" } });
+    if (!response.ok) throw new Error(`Odds provider returned HTTP ${response.status}`);
+    const rawEvents = (await response.json()) as RawOddsEvent[];
+    const [currentGames, futureGames] = await Promise.all([this.getGames(), this.getFutureGames()]);
+    const verifiedGames = [...currentGames, ...futureGames];
+    const games = rawEvents.flatMap((event) => {
+      const away = canonicalTeamName(event.away_team || "");
+      const home = canonicalTeamName(event.home_team || "");
+      const game = verifiedGames.find((candidate) => canonicalTeamName(candidate.awayTeam.name) === away && canonicalTeamName(candidate.homeTeam.name) === home);
+      if (!game) return [];
+      const sportsbooks = (event.bookmakers || []).flatMap((bookmaker) => {
+        const markets = (bookmaker.markets || []).flatMap((market) => {
+          if (!market.key || !market.outcomes?.length) return [];
+          return [{
+            key: market.key,
+            label: market.key === "h2h" ? "Moneyline" : market.key === "spreads" ? "Puck line" : "Total",
+            outcomes: market.outcomes.filter((outcome) => outcome.name && typeof outcome.price === "number").map((outcome) => ({
+              name: outcome.name!,
+              price: outcome.price!,
+              point: outcome.point ?? null,
+            })),
+          }];
+        });
+        if (!bookmaker.key || !bookmaker.title || !markets.length) return [];
+        return [{ key: bookmaker.key, title: bookmaker.title, lastUpdate: bookmaker.last_update ?? null, markets }];
+      });
+      return sportsbooks.length ? [{ game, sportsbooks }] : [];
+    });
+    const data = GetOddsResponse.parse({ provider: "The Odds API", configured: true, lastUpdated: new Date().toISOString(), games });
+    oddsCache = { expiresAt: Date.now() + 60_000, data };
+    return data;
+  }
+
   async getSnipes() {
     return GetSnipesResponse.parse([]);
   }
@@ -463,8 +529,8 @@ class NhlWebApiProvider implements NhlDataProvider {
         provider: this.name,
         lastUpdated: new Date().toISOString(),
         message: games.length > 0
-          ? "Official NHL schedule, standings, roster and player data is available. Model and odds feeds are not configured."
-          : `Official NHL data is connected, but no verified games are scheduled before ${NHL_SEASON_START_DATE}. Model and odds feeds are not configured.`,
+          ? `Official NHL schedule, standings, roster and player data is available. ${process.env.ODDS_API_KEY ? "Sportsbook odds are connected." : "Sportsbook odds are not configured."} Model feed is not configured.`
+          : `Official NHL data is connected, but no verified games are scheduled before ${NHL_SEASON_START_DATE}. ${process.env.ODDS_API_KEY ? "Sportsbook odds are connected when markets are posted." : "Sportsbook odds are not configured."} Model feed is not configured.`,
       },
       games: games.length,
       snipes: 0,

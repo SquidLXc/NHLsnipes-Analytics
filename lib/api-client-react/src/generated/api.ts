@@ -30,6 +30,7 @@ import type {
   MatchupDetail,
   ModelPerformance,
   NotFoundResponse,
+  OddsFeed,
   Player,
   PlayerDetail,
   Prop,
@@ -1076,6 +1077,83 @@ export function useGetPropsByMarket<TData = Awaited<ReturnType<typeof getPropsBy
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetPropsByMarketQueryOptions(market,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetOddsUrl = () => {
+
+
+
+
+  return `/api/odds`
+}
+
+/**
+ * @summary Get sportsbook odds matched to verified NHL games
+ */
+export const getOdds = async ( options?: Parameters<typeof customFetch>[1]): Promise<OddsFeed> => {
+
+  return customFetch<OddsFeed>(getGetOddsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOddsQueryKey = () => {
+    return [
+    `/api/odds`
+    ] as const;
+    }
+
+
+export const getGetOddsQueryOptions = <TData = Awaited<ReturnType<typeof getOdds>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOdds>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOddsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOdds>>> = ({ signal }) => getOdds({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOdds>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOddsQueryResult = NonNullable<Awaited<ReturnType<typeof getOdds>>>
+export type GetOddsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get sportsbook odds matched to verified NHL games
+ */
+
+export function useGetOdds<TData = Awaited<ReturnType<typeof getOdds>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOdds>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOddsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -212,6 +212,18 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Prop"
+  /odds:
+    get:
+      operationId: getOdds
+      tags: [odds]
+      summary: Get sportsbook odds matched to verified NHL games
+      responses:
+        "200":
+          description: Sportsbook odds feed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OddsFeed"
   /matchups:
     get:
       operationId: getMatchups
@@ -533,6 +545,54 @@ components:
         confidence: { type: ["string", "null"] }
         source: { type: ["string", "null"] }
       required: [id, player, opponent, market, line, lineStatus, modelProjection, overProbability, underProbability, edge, confidence, source]
+    OddsFeed:
+      type: object
+      properties:
+        provider: { type: string }
+        configured: { type: boolean }
+        lastUpdated: { type: ["string", "null"], format: date-time }
+        games:
+          type: array
+          items:
+            $ref: "#/components/schemas/OddsGame"
+      required: [provider, configured, lastUpdated, games]
+    OddsGame:
+      type: object
+      properties:
+        game: { $ref: "#/components/schemas/Game" }
+        sportsbooks:
+          type: array
+          items:
+            $ref: "#/components/schemas/SportsbookOdds"
+      required: [game, sportsbooks]
+    SportsbookOdds:
+      type: object
+      properties:
+        key: { type: string }
+        title: { type: string }
+        lastUpdate: { type: ["string", "null"], format: date-time }
+        markets:
+          type: array
+          items:
+            $ref: "#/components/schemas/OddsMarket"
+      required: [key, title, lastUpdate, markets]
+    OddsMarket:
+      type: object
+      properties:
+        key: { type: string }
+        label: { type: string }
+        outcomes:
+          type: array
+          items:
+            $ref: "#/components/schemas/OddsOutcome"
+      required: [key, label, outcomes]
+    OddsOutcome:
+      type: object
+      properties:
+        name: { type: string }
+        price: { type: number }
+        point: { type: ["number", "null"] }
+      required: [name, price, point]
     Snipe:
       type: object
       properties:

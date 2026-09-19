@@ -541,6 +541,66 @@ export const GetPropsByMarketResponse = zod.array(GetPropsByMarketResponseItem)
 
 
 /**
+ * @summary Get sportsbook odds matched to verified NHL games
+ */
+export const GetOddsResponse = zod.object({
+  "provider": zod.string(),
+  "configured": zod.boolean(),
+  "lastUpdated": zod.coerce.date().nullable(),
+  "games": zod.array(zod.object({
+  "game": zod.object({
+  "id": zod.string(),
+  "gameDate": zod.coerce.date(),
+  "awayTeam": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "city": zod.string().nullable(),
+  "abbreviation": zod.string(),
+  "conference": zod.string().nullable(),
+  "division": zod.string().nullable(),
+  "logoUrl": zod.string().url().nullable(),
+  "primaryColor": zod.string().nullable(),
+  "secondaryColor": zod.string().nullable()
+}),
+  "homeTeam": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "city": zod.string().nullable(),
+  "abbreviation": zod.string(),
+  "conference": zod.string().nullable(),
+  "division": zod.string().nullable(),
+  "logoUrl": zod.string().url().nullable(),
+  "primaryColor": zod.string().nullable(),
+  "secondaryColor": zod.string().nullable()
+}),
+  "venue": zod.string().nullable(),
+  "status": zod.enum(['scheduled', 'live', 'final', 'postponed', 'unknown']),
+  "statusDetail": zod.string().nullable(),
+  "matchupScore": zod.number().nullable(),
+  "goalEnvironment": zod.number().nullable(),
+  "shotEnvironment": zod.number().nullable(),
+  "powerPlayEdge": zod.number().nullable(),
+  "goaltendingEdge": zod.number().nullable()
+}),
+  "sportsbooks": zod.array(zod.object({
+  "key": zod.string(),
+  "title": zod.string(),
+  "lastUpdate": zod.coerce.date().nullable(),
+  "markets": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "outcomes": zod.array(zod.object({
+  "name": zod.string(),
+  "price": zod.number(),
+  "point": zod.number().nullable()
+}))
+}))
+}))
+}))
+})
+
+
+/**
  * @summary List matchup edges
  */
 export const GetMatchupsResponseItem = zod.object({

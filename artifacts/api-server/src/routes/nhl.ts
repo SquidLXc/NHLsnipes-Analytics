@@ -139,6 +139,14 @@ router.get("/props/:market", async (req, res) => {
   }
 });
 
+router.get("/odds", async (_req, res) => {
+  try {
+    res.json(await getNhlProvider().getOdds());
+  } catch (error) {
+    handleProviderError(res, error);
+  }
+});
+
 router.get("/matchups", async (_req, res) => {
   try {
     res.json(await getNhlProvider().getMatchups());

@@ -239,6 +239,40 @@ export interface Prop {
   source: string | null;
 }
 
+export interface OddsOutcome {
+  name: string;
+  price: number;
+  /** @nullable */
+  point: number | null;
+}
+
+export interface OddsMarket {
+  key: string;
+  label: string;
+  outcomes: OddsOutcome[];
+}
+
+export interface SportsbookOdds {
+  key: string;
+  title: string;
+  /** @nullable */
+  lastUpdate: string | null;
+  markets: OddsMarket[];
+}
+
+export interface OddsGame {
+  game: Game;
+  sportsbooks: SportsbookOdds[];
+}
+
+export interface OddsFeed {
+  provider: string;
+  configured: boolean;
+  /** @nullable */
+  lastUpdated: string | null;
+  games: OddsGame[];
+}
+
 export interface Snipe {
   id: string;
   player: Player;
