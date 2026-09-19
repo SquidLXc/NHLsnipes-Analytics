@@ -5,8 +5,61 @@
  * NHLsnipes analytics API
  * OpenAPI spec version: 0.1.0
  */
+export type HealthStatusStatus = typeof HealthStatusStatus[keyof typeof HealthStatusStatus];
+
+
+export const HealthStatusStatus = {
+  ok: 'ok',
+  degraded: 'degraded',
+} as const;
+
+export type HealthStatusApplication = typeof HealthStatusApplication[keyof typeof HealthStatusApplication];
+
+
+export const HealthStatusApplication = {
+  ok: 'ok',
+} as const;
+
+export type HealthStatusDatabaseStatus = typeof HealthStatusDatabaseStatus[keyof typeof HealthStatusDatabaseStatus];
+
+
+export const HealthStatusDatabaseStatus = {
+  connected: 'connected',
+  not_configured: 'not configured',
+  error: 'error',
+} as const;
+
+export type HealthStatusDatabase = {
+  status: HealthStatusDatabaseStatus;
+  /** @nullable */
+  message: string | null;
+};
+
+export type HealthStatusProviderStatus = typeof HealthStatusProviderStatus[keyof typeof HealthStatusProviderStatus];
+
+
+export const HealthStatusProviderStatus = {
+  connected: 'connected',
+  error: 'error',
+} as const;
+
+export type HealthStatusProvider = {
+  status: HealthStatusProviderStatus;
+  name: string;
+  /** @nullable */
+  lastSuccessfulSync: string | null;
+  /** @nullable */
+  lastAttemptedSync: string | null;
+};
+
 export interface HealthStatus {
-  status: string;
+  status: HealthStatusStatus;
+  application: HealthStatusApplication;
+  database: HealthStatusDatabase;
+  provider: HealthStatusProvider;
+  /** @nullable */
+  currentDataTimestamp: string | null;
+  configurationProblems: string[];
 }
 
 export interface Error {

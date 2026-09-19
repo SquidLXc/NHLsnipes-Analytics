@@ -1,0 +1,163 @@
+I need you to finish NHLsnipes as a REAL deployable production website, not a mockup.
+
+First inspect the ENTIRE existing repository and determine the actual frontend package, backend/server package, workspace structure, build commands, and production start command.
+
+Do NOT create a new project or replace the existing architecture unless absolutely necessary.
+
+### 1. MAKE THE APP RUN
+
+* Identify the correct frontend and backend packages.
+* Make sure the app has working development and production commands.
+* Make sure the production build succeeds.
+* Make sure the server binds to 0.0.0.0 and uses the PORT environment variable.
+* Make sure the frontend and API work together after deployment.
+* Fix all TypeScript/build/runtime errors.
+* Do not use fake/random data to make the UI appear functional.
+
+### 2. NHL DATA
+
+NHLsnipes needs REAL NHL data.
+
+Inspect the existing data-provider implementation and determine exactly what is missing from the current:
+"No permitted NHL data provided as configured. Add NHL Snipes provider URL to enable live ingestion."
+
+Implement a real provider adapter using a permitted/free NHL data source that can actually be used by this application.
+
+If the existing architecture expects an environment variable for the provider, clearly document the exact variable name and expected value.
+
+Do NOT invent an API URL.
+Do NOT use fake data.
+Do NOT silently fall back to generated/random NHL statistics.
+
+If live data is unavailable, the UI must explicitly show:
+DATA FEED OFFLINE
+or
+DATA UNAVAILABLE
+
+### 3. DATABASE
+
+Make sure the production database configuration is complete.
+
+Verify:
+
+* PostgreSQL connection
+* migrations/schema
+* seed/reference data only where appropriate
+* scheduled ingestion
+* games
+* teams
+* players
+* player statistics
+* goalie statistics
+* odds/props if supported
+* predictions
+* prediction results
+* model versions/runs
+* audit history
+
+Do not fabricate historical statistics.
+
+### 4. REAL ASSETS
+
+Make sure team logos/crests and player headshots are handled through a proper permitted/licensed asset pipeline.
+
+Do not use random placeholder images.
+
+If an asset source requires configuration, tell me exactly what environment variables or configuration are required.
+
+### 5. PRODUCTION UI
+
+Keep the existing NHLsnipes gritty/neon hockey analytics identity.
+
+Every page needs to work with the real application architecture, including:
+
+Dashboard / Today's Slate
+NHL Snipes
+Prop Center
+Goal Model
+SOG Model
+Point Model
+Assist Model
+Goalie Lab
+Matchup Lab
+Team Vulnerability
+Player Pages
+Team Pages
+Watchlist
+Audit System
+Model Performance
+Admin / Health
+
+No dead navigation links.
+No fake cards pretending data exists.
+No "coming soon" placeholders for functionality that is supposed to be implemented.
+
+### 6. HEALTH CHECK
+
+Create/verify a health endpoint that clearly reports:
+
+* application status
+* database status
+* NHL provider status
+* last successful data sync
+* current data timestamp
+* configuration problems
+
+### 7. ENVIRONMENT VARIABLES
+
+Create/update .env.example with every required production variable.
+
+For every required variable, document:
+
+* exact variable name
+* what it is for
+* whether it is required
+* where I obtain it
+
+Never expose secret values in frontend code.
+
+### 8. DEPLOYMENT
+
+Configure the Replit project for deployment.
+
+I need ONE clear production command that Replit can use to start the application.
+
+Verify:
+
+* build command
+* production start command
+* PORT handling
+* 0.0.0.0 binding
+* database connection
+* environment variables
+* API routes
+* static frontend serving
+
+Run the production build and fix any errors before telling me it is ready.
+
+### 9. DOMAIN
+
+I own NHLsnipes.com through Northwest Registered Agent.
+
+Do NOT change my nameservers.
+
+Once the app is successfully deployed, tell me exactly which DNS records I need to create at Northwest Registered Agent to point:
+
+nhlsnipes.com
+[www.nhlsnipes.com](http://www.nhlsnipes.com)
+
+to the Replit deployment.
+
+### FINAL RESPONSE
+
+When finished, give me ONLY:
+
+1. Whether the production build works
+2. The exact Replit deployment/build command
+3. The exact production start command
+4. Every required environment variable
+5. The exact DNS records I need at Northwest
+6. The URL I should test before changing DNS
+7. Any remaining blocker that prevents real NHL data from working
+
+Do not tell me something is production-ready unless you actually verified the build and runtime.

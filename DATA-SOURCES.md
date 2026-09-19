@@ -1,6 +1,6 @@
 # NHLsnipes data sources
 
-NHLsnipes is designed around provider adapters. The app does not scrape NHL EDGE or NHL.com endpoints and does not assume that official tracking data is licensed for commercial redistribution.
+NHLsnipes is designed around provider adapters and does not assume that official tracking data is licensed for commercial redistribution.
 
 ## Configured provider
 
@@ -8,12 +8,12 @@ The default live adapter is the public NHL Web API at `https://api-web.nhle.com/
 
 Team crest and player headshot fields are provider-supplied references only. NHLsnipes does not download or bundle NHL-owned images in the repository. A deployment must confirm that its selected provider permits displaying and caching those references for the intended audience. The provider adapter can be replaced through `NHLSNIPES_NHL_API_BASE_URL` or a permitted `NHLSNIPES_PROVIDER_URL` without changing frontend components.
 
-The base URL can be overridden with `NHLSNIPES_NHL_API_BASE_URL`. The app also requires a verified season boundary through `NHLSNIPES_SEASON_START_DATE`; records earlier than that date are discarded rather than shown as current games.
+The concrete base URL is configured with `NHLSNIPES_NHL_API_BASE_URL`. The app also requires a verified season boundary through `NHLSNIPES_SEASON_START_DATE`; records earlier than that date are discarded rather than shown as current games.
 If a permitted provider returns relative asset references, set `NHLSNIPES_ASSET_BASE_URL` to the approved asset host. Absolute provider URLs are passed through; relative references are ignored unless that base is configured.
 
 ## Provider contract
 
-Set `NHLSNIPES_PROVIDER_URL` to a server-side adapter that is permitted to provide the data for your intended use. The adapter is expected to expose the read-only routes described in `lib/api-spec/openapi.yaml`, including `/dashboard/summary`, `/games`, `/players`, `/teams`, `/goalies`, `/props`, `/matchups`, `/snipes`, `/audit`, and `/model-performance`.
+The current implementation directly normalizes the NHL Web API endpoints used by `artifacts/api-server/src/providers/nhl.ts`. If the source changes, replace that provider adapter only after confirming the replacement permits the intended use; do not point the app at an undocumented or unlicensed endpoint.
 
 The app validates provider responses against the generated Zod schemas before returning them to the client. A missing or invalid provider response is surfaced as a data-provider error; it is never replaced with invented numbers.
 
@@ -27,7 +27,7 @@ NHL EDGE includes extensive skating, shot, location and puck-zone metrics. Those
 
 ## Odds and sportsbook lines
 
-Sportsbook lines must come from an approved odds provider configured server-side. If `NHLSNIPES_ODDS_PROVIDER_URL` is not configured or a market is missing, the product displays `LINE DATA UNAVAILABLE` and does not substitute a line.
+Sportsbook lines come from The Odds API configured server-side with `ODDS_API_KEY`. If the secret is not configured or a market is missing, the product displays an unavailable state and does not substitute a line.
 
 ## Development behavior
 

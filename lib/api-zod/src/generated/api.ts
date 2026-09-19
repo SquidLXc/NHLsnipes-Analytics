@@ -13,7 +13,20 @@ import * as zod from 'zod';
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
-  "status": zod.string()
+  "status": zod.enum(['ok', 'degraded']),
+  "application": zod.enum(['ok']),
+  "database": zod.object({
+  "status": zod.enum(['connected', 'not configured', 'error']),
+  "message": zod.string().nullable()
+}),
+  "provider": zod.object({
+  "status": zod.enum(['connected', 'error']),
+  "name": zod.string(),
+  "lastSuccessfulSync": zod.coerce.date().nullable(),
+  "lastAttemptedSync": zod.coerce.date().nullable()
+}),
+  "currentDataTimestamp": zod.coerce.date().nullable(),
+  "configurationProblems": zod.array(zod.string())
 })
 
 

@@ -15,13 +15,16 @@ localPort = 23191
 run = "pnpm --filter @workspace/nhlsnipes run dev"
 
 [services.production]
-build = [ "pnpm", "--filter", "@workspace/nhlsnipes", "run", "build" ]
-serve = "static"
-publicDir = "artifacts/nhlsnipes/dist/public"
+build = [ "pnpm", "run", "build:production" ]
 
-[[services.production.rewrites]]
-from = "/*"
-to = "/index.html"
+[services.production.run]
+args = [ "node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs" ]
+
+[services.production.run.env]
+PORT = "23191"
+NODE_ENV = "production"
+SERVE_FRONTEND = "true"
+NHLSNIPES_SYNC_INTERVAL_MS = "900000"
 
 [services.env]
 PORT = "23191"

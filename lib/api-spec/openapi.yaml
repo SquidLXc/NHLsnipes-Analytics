@@ -364,8 +364,48 @@ components:
       properties:
         status:
           type: string
+          enum: [ok, degraded]
+        application:
+          type: string
+          enum: [ok]
+        database:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [connected, not configured, error]
+            message:
+              type: ["string", "null"]
+          required: [status, message]
+        provider:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [connected, error]
+            name:
+              type: string
+            lastSuccessfulSync:
+              type: ["string", "null"]
+              format: date-time
+            lastAttemptedSync:
+              type: ["string", "null"]
+              format: date-time
+          required: [status, name, lastSuccessfulSync, lastAttemptedSync]
+        currentDataTimestamp:
+          type: ["string", "null"]
+          format: date-time
+        configurationProblems:
+          type: array
+          items:
+            type: string
       required:
         - status
+        - application
+        - database
+        - provider
+        - currentDataTimestamp
+        - configurationProblems
     Error:
       type: object
       properties:
