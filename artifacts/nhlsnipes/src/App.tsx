@@ -291,16 +291,107 @@ function SnipesPage() {
 }
 
 function PropsPage() {
-  const [market, setMarket] = useState<Exclude<Market, 'all'>>('goals');
-  const query = useGetPropsByMarket(market, { query: { queryKey: getGetPropsByMarketQueryKey(market) } });
   const all = useGetProps(undefined, { query: { queryKey: getGetPropsQueryKey() } });
-  const rows = (query.data as Prop[] | undefined) || [];
-  return <><PageHeader eyebrow="Market board / line aware" title="Prop board" copy="Scan available lines against model projections. Unavailable sportsbook data stays explicitly unavailable." action={<Link data-testid="link-snipes-from-props" href="/snipes" className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary">Find edges <ArrowUpRight size={14} /></Link>} /><div className="mb-5 flex flex-wrap gap-2">{markets.slice(1).map((item) => <button data-testid={`button-prop-market-${item}`} key={item} onClick={() => setMarket(item as Exclude<Market, 'all'>)} className={`rounded-lg border px-3 py-2 text-[11px] font-semibold uppercase tracking-wider ${market === item ? 'border-secondary/40 bg-secondary/10 text-secondary' : 'border-border text-muted-foreground hover:text-foreground'}`}>{item}</button>)}</div><div className="mb-6 flex items-center gap-2 text-[11px] text-muted-foreground"><Info size={14} className="text-secondary" />Showing {rows.length || (all.data as Prop[] | undefined)?.length || 0} {market} records. A missing line is not a bet.</div><QueryState loading={query.isLoading} error={query.isError} empty={!query.isLoading && !query.isError && rows.length === 0} onRetry={() => query.refetch()}><div className="space-y-2">{rows.map((prop) => <PropCard key={prop.id} prop={prop} />)}</div></QueryState></>;
+  const rows = (all.data as Prop[] | undefined) || [];
+  const topEdges = rows.filter(p => p.edge && p.edge > 0.05).slice(0, 10);
+  
+  return <>
+    <PageHeader 
+      eyebrow="Today's Top Edges / AI Predictions" 
+      title="Player Props" 
+      copy="AI-generated goal probabilities matched with live DraftKings odds. Edge = Model Probability - Implied Odds Probability." 
+      action={<Link data-testid="link-snipes-from-props" href="/snipes" className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary">All Snipes <ArrowUpRight size={14} /></Link>} 
+    />
+    
+    {topEdges.length > 0 && (
+      <div className="mb-8 rounded-xl border-2 border-primary/30 bg-gradient-to-br from-primary/5 to-secondary/5 p-6">
+        <div className="mb-4 flex items-center gap-2">
+          <TrendingUp size={20} className="text-primary" />
+          <h2 className="text-xl font-bold">Top 10 Edges Today</h2>
+        </div>
+        <p className="mb-6 text-sm text-muted-foreground">
+          Players with the highest calculated edge based on AI probability vs sportsbook odds
+        </p>
+        <div className="space-y-3">
+          {topEdges.map((prop, index) => <TopEdgeCard key={prop.id} prop={prop} rank={index + 1} />)}
+        </div>
+      </div>
+    )}
+
+    <div className="mb-6 flex items-center gap-2 text-[11px] text-muted-foreground">
+      <Info size={14} className="text-secondary" />
+      Showing {rows.length} player predictions. {rows.filter(p => p.lineStatus === 'available').length} have live odds.
+    </div>
+    
+    <QueryState loading={all.isLoading} error={all.isError} empty={!all.isLoading && !all.isError && rows.length === 0} onRetry={() => all.refetch()}>
+      <div className="space-y-2">{rows.map((prop) => <PropCard key={prop.id} prop={prop} />)}</div>
+    </QueryState>
+  </>;
+}
+
+function TopEdgeCard({ prop, rank }: { prop: Prop; rank: number }) {
+  const available = prop.lineStatus === 'available';
+  const americanOdds = prop.line !== null ? (prop.line > 0 ? `+${Math.round(prop.line)}` : Math.round(prop.line).toString()) : '—';
+  
+  return (
+    <div data-testid={`card-top-edge-${prop.id}`} className="grid gap-4 rounded-lg border-2 border-primary/20 bg-card p-4 transition-all hover:border-primary/40 hover:shadow-lg md:grid-cols-[auto_1.5fr_1fr_1fr_1fr_auto] md:items-center">
+      <div className="flex items-center justify-center">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 font-bold text-primary">
+          #{rank}
+        </div>
+      </div>
+      
+      <div className="flex items-center gap-3">
+        <PlayerImage player={prop.player} size="md" />
+        <div>
+          <Link data-testid={`link-prop-player-${prop.player.id}`} href={`/players/${prop.player.id}`} className="text-base font-bold hover:text-primary">
+            {prop.player.fullName}
+          </Link>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            {prop.player.team.abbreviation} vs {prop.opponent.abbreviation}
+          </p>
+        </div>
+      </div>
+      
+      <div>
+        <p className="font-mono text-[10px] uppercase text-muted-foreground">AI Probability</p>
+        <p className="mt-1 text-xl font-bold text-primary">{pct(prop.overProbability)}</p>
+        <p className="text-[9px] text-muted-foreground">to score a goal</p>
+      </div>
+      
+      <div>
+        <p className="font-mono text-[10px] uppercase text-muted-foreground">DraftKings Odds</p>
+        <p className={`mt-1 text-xl font-bold ${available ? 'text-foreground' : 'text-muted-foreground'}`}>
+          {available ? americanOdds : 'N/A'}
+        </p>
+        <p className="text-[9px] text-muted-foreground">{available ? prop.source || 'sportsbook' : 'not available'}</p>
+      </div>
+      
+      <div>
+        <p className="font-mono text-[10px] uppercase text-muted-foreground">Edge</p>
+        <p className="mt-1 text-2xl font-bold text-accent">{pct(prop.edge)}</p>
+        <p className="text-[9px] text-muted-foreground">model advantage</p>
+      </div>
+      
+      <div className="flex flex-col gap-2 md:items-end">
+        <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${
+          prop.confidence === 'ELITE' ? 'border-accent/40 bg-accent/10 text-accent' :
+          prop.confidence === 'STRONG' ? 'border-primary/40 bg-primary/10 text-primary' :
+          prop.confidence === 'MODERATE' ? 'border-secondary/40 bg-secondary/10 text-secondary' :
+          'border-border text-muted-foreground'
+        }`}>
+          {prop.confidence || 'WATCH'}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 function PropCard({ prop }: { prop: Prop }) {
   const available = prop.lineStatus === 'available';
-  return <div data-testid={`card-prop-${prop.id}`} className="grid gap-4 rounded-xl border border-border bg-card/70 p-4 transition-colors hover:border-secondary/40 md:grid-cols-[1.5fr_1fr_.8fr_.8fr_auto] md:items-center"><div className="flex items-center gap-3"><PlayerImage player={prop.player} size="md" /><div><Link data-testid={`link-prop-player-${prop.player.id}`} href={`/players/${prop.player.id}`} className="text-sm font-bold hover:text-primary">{prop.player.fullName}</Link><p className="mt-1 text-[10px] text-muted-foreground">{prop.player.team.abbreviation} vs {prop.opponent.abbreviation} · {prop.market}</p></div></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">Projection</p><p className="mt-1 text-lg font-bold">{fmt(prop.modelProjection)}</p></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">Line</p><p className={`mt-1 text-lg font-bold ${available ? 'text-foreground' : 'text-muted-foreground'}`}>{available ? fmt(prop.line) : 'Unavailable'}</p></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">Edge</p><p className={`mt-1 text-lg font-bold ${prop.edge ? 'text-primary' : 'text-muted-foreground'}`}>{pct(prop.edge)}</p></div><div className="flex items-center gap-2 md:justify-end"><span className={`rounded-full border px-2 py-1 text-[9px] uppercase tracking-wider ${available ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border text-muted-foreground'}`}>{available ? 'priced' : 'no line'}</span><span className="rounded-full bg-secondary/10 px-2 py-1 text-[9px] text-secondary">{prop.confidence || 'Unrated'}</span></div></div>;
+  const americanOdds = prop.line !== null ? (prop.line > 0 ? `+${Math.round(prop.line)}` : Math.round(prop.line).toString()) : '—';
+  
+  return <div data-testid={`card-prop-${prop.id}`} className="grid gap-4 rounded-xl border border-border bg-card/70 p-4 transition-colors hover:border-secondary/40 md:grid-cols-[1.5fr_.9fr_.9fr_.8fr_auto] md:items-center"><div className="flex items-center gap-3"><PlayerImage player={prop.player} size="md" /><div><Link data-testid={`link-prop-player-${prop.player.id}`} href={`/players/${prop.player.id}`} className="text-sm font-bold hover:text-primary">{prop.player.fullName}</Link><p className="mt-1 text-[10px] text-muted-foreground">{prop.player.team.abbreviation} vs {prop.opponent.abbreviation} · {prop.market}</p></div></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">AI Probability</p><p className="mt-1 text-lg font-bold text-primary">{pct(prop.overProbability)}</p></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">DK Odds</p><p className={`mt-1 text-lg font-bold ${available ? 'text-foreground' : 'text-muted-foreground'}`}>{available ? americanOdds : 'N/A'}</p></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">Edge</p><p className={`mt-1 text-lg font-bold ${prop.edge && prop.edge > 0 ? 'text-accent' : 'text-muted-foreground'}`}>{pct(prop.edge)}</p></div><div className="flex items-center gap-2 md:justify-end"><span className={`rounded-full border px-2 py-1 text-[9px] uppercase tracking-wider ${available ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border text-muted-foreground'}`}>{available ? 'live' : 'no odds'}</span><span className={`rounded-full px-2 py-1 text-[9px] uppercase ${prop.confidence === 'ELITE' || prop.confidence === 'STRONG' ? 'bg-accent/10 text-accent' : 'bg-secondary/10 text-secondary'}`}>{prop.confidence || 'watch'}</span></div></div>;
 }
 
 function MatchupsPage() {

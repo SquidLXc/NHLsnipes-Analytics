@@ -554,7 +554,125 @@ class NhlWebApiProvider implements NhlDataProvider {
   }
 
   async getProps() {
-    return GetPropsResponse.parse([]);
+    const [games, players, playerPropsOdds] = await Promise.all([
+      this.getGames(),
+      this.getPlayers(),
+      this.getPlayerPropsOdds(),
+    ]);
+
+    if (!games.length || !players.length) {
+      return GetPropsResponse.parse([]);
+    }
+
+    // Build opponent map
+    const opponentByTeam = new Map<string, ReturnType<typeof teamFromRaw>>();
+    games.forEach((game) => {
+      opponentByTeam.set(game.homeTeam.id, game.awayTeam);
+      opponentByTeam.set(game.awayTeam.id, game.homeTeam);
+    });
+
+    // Calculate predictions for each player
+    const props = await Promise.all(
+      players.map(async (player) => {
+        const opponent = opponentByTeam.get(player.team.id);
+        if (!opponent) return null;
+
+        // Get detailed player stats
+        let detailedPlayer;
+        try {
+          detailedPlayer = await this.getPlayer(player.id);
+        } catch {
+          return null;
+        }
+
+        if (!detailedPlayer) return null;
+
+        // Calculate stats
+        const seasonStats = detailedPlayer.seasonStats;
+        const recentStats = detailedPlayer.recentStats.slice(0, 5);
+        
+        const seasonGames = seasonStats.games || 1;
+        const recentGames = recentStats.reduce((sum, g) => sum + (g.games || 0), 0) || 1;
+
+        const seasonGoalsPerGame = seasonStats.goals / seasonGames;
+        const recentGoalsPerGame = recentStats.reduce((sum, g) => sum + g.goals, 0) / recentGames;
+        
+        const seasonShotsPerGame = seasonStats.sog / seasonGames;
+        const recentShotsPerGame = recentStats.reduce((sum, g) => sum + g.sog, 0) / recentGames;
+
+        // Use goal model to calculate probability
+        const { runGoalModel } = await import("../models/goal-model");
+        const prediction = runGoalModel({
+          seasonGoalsPerGame,
+          recentGoalsPerGame,
+          seasonShotsPerGame,
+          recentShotsPerGame,
+          opponentGoalsAllowedPerGame: 3.0, // Default, would need opponent stats
+          powerPlayShare: 0.5, // Simplified
+          expectedToiMinutes: 18, // Default
+          homeAdjustment: 0.05,
+          restAdjustment: 0,
+        });
+
+        // Find matching odds for this player
+        const canonicalPlayerName = (name: string) =>
+          name.toLowerCase().replace(/[^a-z]/g, "");
+        
+        const playerCanonical = canonicalPlayerName(player.fullName);
+        const matchingProp = playerPropsOdds.find((prop) =>
+          canonicalPlayerName(prop.playerName).includes(playerCanonical) ||
+          playerCanonical.includes(canonicalPlayerName(prop.playerName))
+        );
+
+        const odds = matchingProp?.odds ?? null;
+        const line = matchingProp?.line ?? null;
+
+        // Calculate edge if we have odds
+        let edge = null;
+        if (odds !== null) {
+          // Convert American odds to implied probability
+          const impliedProb = odds > 0
+            ? 100 / (odds + 100)
+            : Math.abs(odds) / (Math.abs(odds) + 100);
+          
+          edge = prediction.onePlus - impliedProb;
+        }
+
+        const { confidenceFromEdge } = await import("../models/confidence");
+        const confidence = confidenceFromEdge(edge, seasonGames);
+
+        return {
+          id: `${player.id}-anytime-goal`,
+          player: {
+            id: player.id,
+            fullName: player.fullName,
+            firstName: player.firstName,
+            lastName: player.lastName,
+            teamId: player.team.id,
+            team: player.team,
+            position: player.position,
+            jerseyNumber: player.jerseyNumber,
+            headshotUrl: player.headshotUrl,
+          },
+          opponent,
+          market: "Anytime Goal Scorer",
+          line,
+          lineStatus: odds !== null ? ("available" as const) : ("unavailable" as const),
+          modelProjection: prediction.expectedGoals,
+          overProbability: prediction.onePlus,
+          underProbability: 1 - prediction.onePlus,
+          edge,
+          confidence,
+          source: matchingProp?.bookmaker ?? null,
+        };
+      })
+    );
+
+    // Filter out nulls and sort by edge
+    const validProps = props.filter((p): p is NonNullable<typeof p> => p !== null);
+    validProps.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+
+    return GetPropsResponse.parse(validProps);
   }
 
   async getPropsByMarket() {
@@ -613,6 +731,88 @@ class NhlWebApiProvider implements NhlDataProvider {
     const data = GetOddsResponse.parse({ provider: "The Odds API", configured: true, lastUpdated: new Date().toISOString(), games });
     oddsCache = { expiresAt: Date.now() + 60_000, data };
     return data;
+  }
+
+  async getPlayerPropsOdds() {
+    const apiKey = process.env.ODDS_API_KEY;
+    if (!apiKey) return [];
+
+    // Get today's games to fetch player props for
+    const games = await this.getGames();
+    if (!games.length) return [];
+
+    // Fetch player prop odds for each game
+    const propsPromises = games.map(async (game) => {
+      try {
+        // The Odds API requires event IDs - we'll try to match by teams
+        const oddsData = await this.getOdds();
+        const matchingOddsGame = oddsData.games.find(
+          (og) => og.game.id === game.id
+        );
+        if (!matchingOddsGame) return [];
+
+        // Fetch player props for this specific game
+        // Note: The Odds API uses a different endpoint structure for player props
+        // We'll need to query with the sport and get player markets
+        const url = new URL("https://api.the-odds-api.com/v4/sports/icehockey_nhl/odds");
+        url.searchParams.set("apiKey", apiKey);
+        url.searchParams.set("regions", "us");
+        url.searchParams.set("markets", "player_goal_scorer_anytime,player_shots_on_goal");
+        url.searchParams.set("oddsFormat", "american");
+        
+        const response = await fetch(url, { headers: { accept: "application/json" } });
+        if (!response.ok) return [];
+        
+        const rawEvents = (await response.json()) as any[];
+        
+        // Find the event matching our game
+        const away = canonicalTeamName(game.awayTeam.name);
+        const home = canonicalTeamName(game.homeTeam.name);
+        const event = rawEvents.find((e) => 
+          canonicalTeamName(e.away_team || "") === away && 
+          canonicalTeamName(e.home_team || "") === home
+        );
+        
+        if (!event || !event.bookmakers) return [];
+
+        // Extract player props from bookmakers
+        const playerProps: Array<{
+          playerName: string;
+          market: string;
+          odds: number;
+          bookmaker: string;
+          line?: number;
+        }> = [];
+
+        event.bookmakers.forEach((bookmaker: any) => {
+          if (!bookmaker.markets) return;
+          
+          bookmaker.markets.forEach((market: any) => {
+            if (!market.outcomes) return;
+            
+            market.outcomes.forEach((outcome: any) => {
+              if (outcome.description) {
+                playerProps.push({
+                  playerName: outcome.description,
+                  market: market.key,
+                  odds: outcome.price,
+                  bookmaker: bookmaker.key,
+                  line: outcome.point,
+                });
+              }
+            });
+          });
+        });
+
+        return playerProps.map(prop => ({ ...prop, gameId: game.id }));
+      } catch (error) {
+        console.error(`Error fetching props for game ${game.id}:`, error);
+        return [];
+      }
+    });
+
+    const allProps = await Promise.all(propsPromises);
+    return allProps.flat();
   }
 
   async getSnipes() {
