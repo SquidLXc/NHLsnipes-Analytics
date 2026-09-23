@@ -397,8 +397,8 @@ function PropCard({ prop }: { prop: Prop }) {
 function MatchupsPage() {
   const [location] = useLocation();
   const selectedGameId = useMemo(() => {
-    if (typeof window === 'undefined') return '';
-    return new URLSearchParams(window.location.search).get('game') || '';
+    const params = new URLSearchParams(location.split('?')[1] || '');
+    return params.get('game') || '';
   }, [location]);
   const query = useGetMatchups({ query: { queryKey: getGetMatchupsQueryKey() } });
   const gamesQuery = useGetGames(undefined, { query: { queryKey: getGetGamesQueryKey() } });
