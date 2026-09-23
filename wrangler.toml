@@ -1,0 +1,8 @@
+[build]
+command = "pnpm run build:production"
+
+[build.upload]
+format = "service-worker"
+
+[[routes]]
+pattern = "/*"
