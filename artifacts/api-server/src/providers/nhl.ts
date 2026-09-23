@@ -4,6 +4,7 @@ import {
   GetGameResponse,
   GetGamesResponse,
   GetGoaliesResponse,
+  GetLiveAlertsResponse,
   GetMatchupResponse,
   GetMatchupsResponse,
   GetModelPerformanceResponse,
@@ -36,6 +37,7 @@ export type ProviderData = {
   snipes: z.infer<typeof GetSnipesResponse>;
   audit: z.infer<typeof GetAuditResponse>;
   performance: z.infer<typeof GetModelPerformanceResponse>;
+  liveAlerts: z.infer<typeof GetLiveAlertsResponse>;
 };
 
 export type SyncReport = {
@@ -68,6 +70,7 @@ export interface NhlDataProvider {
   getDashboard(): Promise<ProviderData["dashboard"]>;
   getGames(date?: string): Promise<ProviderData["games"]>;
   getFutureGames(): Promise<ProviderData["games"]>;
+  getLiveAlerts(): Promise<ProviderData["liveAlerts"]>;
   getGame(gameId: string): Promise<ProviderData["game"] | null>;
   getMatchup(gameId: string): Promise<ProviderData["matchup"] | null>;
   getPlayers(search?: string, team?: string): Promise<ProviderData["players"]>;
@@ -110,6 +113,31 @@ type RawGame = {
   gameState?: string;
   awayTeam: RawTeam & { score?: number };
   homeTeam: RawTeam & { score?: number };
+};
+type RawGoal = {
+  eventId?: number;
+  playerId?: number;
+  firstName?: { default?: string };
+  lastName?: { default?: string };
+  name?: { default?: string };
+  teamAbbrev?: string;
+  sweaterNumber?: number;
+  headshot?: string;
+  timeInPeriod?: string;
+  awayScore?: number;
+  homeScore?: number;
+  strength?: string;
+};
+type RawGameLanding = RawGame & {
+  summary?: {
+    scoring?: Array<{
+      periodDescriptor?: {
+        number?: number;
+        periodType?: string;
+      };
+      goals?: RawGoal[];
+    }>;
+  };
 };
 type RawOddsEvent = {
   id: string;
@@ -196,6 +224,15 @@ function status(value?: string): "scheduled" | "live" | "final" | "postponed" | 
   if (value === "OFF" || value === "FINAL") return "final";
   if (value === "PPD") return "postponed";
   return "unknown";
+}
+
+function periodLabel(number: number, periodType?: string) {
+  if (periodType === "OT") return "OT";
+  if (periodType === "SO") return "SO";
+  if (number === 1) return "1st";
+  if (number === 2) return "2nd";
+  if (number === 3) return "3rd";
+  return `P${number}`;
 }
 
 function teamFromRaw(raw: RawTeam, fallbackId?: string): NormalizedTeam {
@@ -319,6 +356,69 @@ class NhlWebApiProvider implements NhlDataProvider {
       if (games.length) return games;
     }
     return GetGamesResponse.parse([]);
+  }
+
+  async getLiveAlerts() {
+    const liveGames = (await this.getGames()).filter((game) => game.status === "live");
+    if (!liveGames.length) {
+      return GetLiveAlertsResponse.parse({
+        state: "waiting",
+        updatedAt: new Date().toISOString(),
+        alerts: [],
+      });
+    }
+
+    const players = await this.getPlayers();
+    const playersById = new Map(players.map((player) => [player.id, player]));
+    const alertsByGame = await Promise.all(
+      liveGames.map(async (game) => {
+        const landing = await this.fetchJson<RawGameLanding>(
+          `gamecenter/${encodeURIComponent(game.id)}/landing`,
+        );
+        const scoring = landing.summary?.scoring ?? [];
+        return scoring.flatMap((period) => {
+          const periodNumber = period.periodDescriptor?.number ?? 0;
+          return (period.goals ?? []).flatMap((goal) => {
+            if (goal.eventId === undefined || goal.playerId === undefined || !goal.teamAbbrev) return [];
+            const scoringTeam = [game.awayTeam, game.homeTeam].find(
+              (team) => team.abbreviation.toLowerCase() === goal.teamAbbrev?.toLowerCase(),
+            );
+            if (!scoringTeam) return [];
+            const player = playersById.get(String(goal.playerId));
+            const fullName =
+              goal.name?.default ||
+              `${goal.firstName?.default ?? ""} ${goal.lastName?.default ?? ""}`.trim() ||
+              "Unknown scorer";
+            return [{
+              id: `${game.id}:${goal.eventId}`,
+              gameId: game.id,
+              gameDate: game.gameDate,
+              awayTeam: game.awayTeam,
+              homeTeam: game.homeTeam,
+              scoringTeam,
+              scorer: {
+                id: String(goal.playerId),
+                fullName,
+                jerseyNumber: goal.sweaterNumber ?? player?.jerseyNumber ?? null,
+                headshotUrl: assetUrl(goal.headshot) ?? player?.headshotUrl ?? null,
+              },
+              periodNumber,
+              periodLabel: periodLabel(periodNumber, period.periodDescriptor?.periodType),
+              timeInPeriod: goal.timeInPeriod ?? "time unavailable",
+              awayScore: goal.awayScore ?? null,
+              homeScore: goal.homeScore ?? null,
+              strength: goal.strength ?? null,
+            }];
+          });
+        });
+      }),
+    );
+
+    return GetLiveAlertsResponse.parse({
+      state: "live",
+      updatedAt: new Date().toISOString(),
+      alerts: alertsByGame.flat(),
+    });
   }
 
   async getGame(gameId: string) {

@@ -26,6 +26,7 @@ import type {
   GetSnipesParams,
   Goalie,
   HealthStatus,
+  LiveAlerts,
   Matchup,
   MatchupDetail,
   ModelPerformance,
@@ -209,6 +210,84 @@ export function useGetDashboardSummary<TData = Awaited<ReturnType<typeof getDash
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetDashboardSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetLiveAlertsUrl = () => {
+
+
+
+
+  return `/api/live-alerts`
+}
+
+/**
+ * Returns confirmed scoring events from games currently in progress.
+ * @summary Get live goal alerts
+ */
+export const getLiveAlerts = async ( options?: Parameters<typeof customFetch>[1]): Promise<LiveAlerts> => {
+
+  return customFetch<LiveAlerts>(getGetLiveAlertsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLiveAlertsQueryKey = () => {
+    return [
+    `/api/live-alerts`
+    ] as const;
+    }
+
+
+export const getGetLiveAlertsQueryOptions = <TData = Awaited<ReturnType<typeof getLiveAlerts>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLiveAlerts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLiveAlertsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLiveAlerts>>> = ({ signal }) => getLiveAlerts({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLiveAlerts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLiveAlertsQueryResult = NonNullable<Awaited<ReturnType<typeof getLiveAlerts>>>
+export type GetLiveAlertsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get live goal alerts
+ */
+
+export function useGetLiveAlerts<TData = Awaited<ReturnType<typeof getLiveAlerts>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLiveAlerts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLiveAlertsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -278,6 +278,9 @@
   .asset-player { box-shadow: inset 0 0 0 1px rgba(255,255,255,.05), 0 0 14px rgba(164,104,255,.1), 0 10px 26px rgba(0,0,0,.24); }
   .asset-skeleton { background: linear-gradient(110deg, rgba(255,255,255,.03) 25%, rgba(185,255,70,.13) 42%, rgba(255,255,255,.03) 62%); background-size: 220% 100%; animation: asset-shimmer 1.3s linear infinite; }
   @keyframes asset-shimmer { to { background-position: -220% 0; } }
+  .live-alert-marquee-active { animation: live-alert-scroll 18s linear infinite; }
+  @keyframes live-alert-scroll { from { transform: translateY(0); } to { transform: translateY(-50%); } }
+  @media (prefers-reduced-motion: reduce) { .live-alert-marquee-active { animation: none; } }
   .rise { animation: rise .45s ease both; }
   @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 }

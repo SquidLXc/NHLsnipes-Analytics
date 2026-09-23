@@ -43,6 +43,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DashboardSummary"
+  /live-alerts:
+    get:
+      operationId: getLiveAlerts
+      tags: [dashboard]
+      summary: Get live goal alerts
+      description: Returns confirmed scoring events from games currently in progress.
+      responses:
+        "200":
+          description: Live goal alerts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveAlerts"
   /games:
     get:
       operationId: getGames
@@ -447,6 +460,62 @@ components:
           items:
             $ref: "#/components/schemas/ModelPerformance"
       required: [dataStatus, games, snipes, playersAnalyzed, topConfidence, modelVersion, marketPerformance]
+    LiveAlerts:
+      type: object
+      properties:
+        state:
+          type: string
+          enum: [live, waiting]
+        updatedAt:
+          type: string
+          format: date-time
+        alerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/LiveGoalAlert"
+      required: [state, updatedAt, alerts]
+    LiveGoalAlert:
+      type: object
+      properties:
+        id:
+          type: string
+        gameId:
+          type: string
+        gameDate:
+          type: string
+          format: date-time
+        awayTeam:
+          $ref: "#/components/schemas/Team"
+        homeTeam:
+          $ref: "#/components/schemas/Team"
+        scoringTeam:
+          $ref: "#/components/schemas/Team"
+        scorer:
+          type: object
+          properties:
+            id:
+              type: string
+            fullName:
+              type: string
+            jerseyNumber:
+              type: ["integer", "null"]
+            headshotUrl:
+              type: ["string", "null"]
+              format: uri
+          required: [id, fullName, jerseyNumber, headshotUrl]
+        periodNumber:
+          type: integer
+        periodLabel:
+          type: string
+        timeInPeriod:
+          type: string
+        awayScore:
+          type: ["integer", "null"]
+        homeScore:
+          type: ["integer", "null"]
+        strength:
+          type: ["string", "null"]
+      required: [id, gameId, gameDate, awayTeam, homeTeam, scoringTeam, scorer, periodNumber, periodLabel, timeInPeriod, awayScore, homeScore, strength]
     Team:
       type: object
       properties:

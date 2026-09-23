@@ -9,16 +9,16 @@ import {
   getGetAuditQueryKey, getGetDashboardSummaryQueryKey, getGetFutureGamesQueryKey, getGetGameQueryKey, getGetGamesQueryKey, getGetMatchupQueryKey, getGetOddsQueryKey,
   getGetGoaliesQueryKey, getGetMatchupsQueryKey, getGetModelPerformanceQueryKey,
   getGetPlayerQueryKey, getGetPlayersQueryKey, getGetPropsByMarketQueryKey, getGetPropsQueryKey,
-  getGetSnipesQueryKey, getGetTeamQueryKey, getGetTeamsQueryKey, getGetTodayGamesQueryKey,
+  getGetLiveAlertsQueryKey, getGetSnipesQueryKey, getGetTeamQueryKey, getGetTeamsQueryKey, getGetTodayGamesQueryKey,
   getHealthCheckQueryKey, useHealthCheck, useGetAudit, useGetDashboardSummary, useGetGame,
-  useGetFutureGames, useGetGames, useGetGoalies, useGetMatchup, useGetMatchups, useGetOdds, useGetPlayer, useGetPlayers, useGetProps,
+  useGetFutureGames, useGetGames, useGetGoalies, useGetLiveAlerts, useGetMatchup, useGetMatchups, useGetOdds, useGetPlayer, useGetPlayers, useGetProps,
   useGetPropsByMarket, useGetSnipes, useGetTeam, useGetTeams, useGetTodayGames,
   useGetModelPerformance
 } from '@workspace/api-client-react';
 import { useDataHealth } from '@/lib/api-hooks';
 import type {
   AuditRecord, DashboardSummary, Game, Goalie, Matchup, MatchupDetail, MatchupPlayer, ModelPerformance, OddsFeed, OddsMarket, Player, PlayerDetail,
-  Prop, Snipe, Team, TeamDetail
+  LiveAlerts, Prop, Snipe, Team, TeamDetail
 } from '@workspace/api-client-react';
 import { PlayerImage, TeamCrest } from '@/components/assets';
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -121,6 +121,113 @@ function GameRow({ game }: { game: Game }) {
 function SnipeRow({ snipe, watchlist, onWatch }: { snipe: Snipe; watchlist: string[]; onWatch: (id: string) => void }) {
   const saved = watchlist.includes(snipe.player.id);
   return <div data-testid={`row-snipe-${snipe.id}`} className="group grid gap-4 border-b border-border/80 py-4 first:pt-0 last:border-0 md:grid-cols-[1.6fr_1fr_1fr_1fr_auto] md:items-center"><div className="flex items-center gap-3"><button data-testid={`button-watch-${snipe.player.id}`} onClick={() => onWatch(snipe.player.id)} className={`rounded-lg border p-2 transition-colors ${saved ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-primary'}`}><Star size={14} fill={saved ? 'currentColor' : 'none'} /></button><PlayerImage player={snipe.player} size="sm" /><div><Link data-testid={`link-player-${snipe.player.id}`} href={`/players/${snipe.player.id}`} className="text-sm font-bold hover:text-primary">{snipe.player.fullName}</Link><div className="mt-0.5 text-[10px] text-muted-foreground">{snipe.player.team.abbreviation} · {snipe.player.position} · vs {snipe.opponent.abbreviation}</div></div></div><div><div className="text-sm font-semibold">{snipe.confidence}</div><div className="mt-1 h-1.5 w-24 rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(snipe.score, 100)}%` }} /></div></div><div><div className="font-mono text-sm text-foreground">{fmt(snipe.modelProjection)}</div><div className="text-[10px] text-muted-foreground">model / {fmt(snipe.line)} line</div></div><div><div className="font-mono text-sm text-primary">{pct(snipe.edge)}</div><div className="text-[10px] text-muted-foreground">edge</div></div><div className="flex flex-wrap gap-1 md:justify-end">{snipe.factors.slice(0, 2).map((factor) => <span key={factor} className="rounded border border-secondary/25 bg-secondary/10 px-2 py-1 text-[9px] text-secondary">{factor}</span>)}</div></div>;
+}
+
+function LiveAlertsPanel() {
+  const query = useGetLiveAlerts({
+    query: {
+      queryKey: getGetLiveAlertsQueryKey(),
+      refetchInterval: 30_000,
+    },
+  });
+  const feed = query.data as LiveAlerts | undefined;
+  const alerts = feed?.alerts ?? [];
+  const latestAlerts = alerts.slice(-6).reverse();
+  const tickerAlerts = latestAlerts.length > 1 ? [...latestAlerts, ...latestAlerts] : latestAlerts;
+  const statusLabel = query.isLoading ? 'CHECKING' : query.isError ? 'OFFLINE' : feed?.state === 'live' ? 'LIVE' : 'WAITING';
+
+  return (
+    <section data-testid="panel-live-alerts" className="scanline rounded-xl border border-accent/25 bg-accent/5 p-4 shadow-[0_0_28px_rgba(255,83,207,.06)]">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[.16em] text-accent">Live goal alerts</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">Confirmed scoring events from NHL game feeds</p>
+        </div>
+        <span className={`rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-wider ${statusLabel === 'LIVE' ? 'border-primary/30 bg-primary/10 text-primary' : 'border-accent/30 text-accent'}`}>
+          {statusLabel}
+        </span>
+      </div>
+      <div aria-live="polite" className="relative h-[82px] overflow-hidden rounded-lg border border-border/80 bg-background/70 px-3">
+        {query.isError ? (
+          <div className="flex h-full items-center gap-2 text-[11px] text-muted-foreground">
+            <CircleAlert size={14} className="text-destructive" />
+            Live alert feed unavailable. No events were invented.
+          </div>
+        ) : tickerAlerts.length ? (
+          <div className={`live-alert-marquee flex flex-col justify-center gap-2 py-2 ${tickerAlerts.length > latestAlerts.length ? 'live-alert-marquee-active' : ''}`}>
+            {tickerAlerts.map((alert, index) => (
+              <div data-testid={`live-alert-${alert.id}`} key={`${alert.id}-${index}`} className="flex min-w-0 items-center gap-2 font-mono text-[10px] uppercase tracking-[.04em]">
+                <span className="shrink-0 text-accent">GOAL</span>
+                <span className="truncate text-foreground">#{alert.scorer.jerseyNumber ?? '—'} {alert.scorer.fullName}</span>
+                <span className="shrink-0 text-primary">{alert.scoringTeam.abbreviation}</span>
+                <span className="shrink-0 text-muted-foreground">{alert.periodLabel} {alert.timeInPeriod}</span>
+                <span className="ml-auto shrink-0 text-foreground">{alert.awayTeam.abbreviation} {alert.awayScore ?? '—'} — {alert.homeScore ?? '—'} {alert.homeTeam.abbreviation}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex h-full items-center text-[11px] text-muted-foreground">
+            {feed?.state === 'live' ? 'Live games are in progress. Waiting for a confirmed goal.' : 'No games live. Confirmed goals will scroll here during play.'}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function HomeWithLiveAlerts() {
+  const summary = useGetDashboardSummary({ query: { queryKey: getGetDashboardSummaryQueryKey() } });
+  const today = useGetTodayGames({ query: { queryKey: getGetTodayGamesQueryKey() } });
+  const future = useGetFutureGames({ query: { queryKey: getGetFutureGamesQueryKey() } });
+  const odds = useGetOdds({ query: { queryKey: getGetOddsQueryKey() } });
+  const snipes = useGetSnipes(undefined, { query: { queryKey: getGetSnipesQueryKey() } });
+  const [watchlist, setWatchlist] = useWatchlist();
+  const data = summary.data as DashboardSummary | undefined;
+  const oddsFeed = odds.data as OddsFeed | undefined;
+  const topSnipes = (snipes.data as Snipe[] | undefined)?.slice(0, 5) || [];
+  const todayGames = (today.data as Game[] | undefined) || [];
+  const futureGames = (future.data as Game[] | undefined) || [];
+  const modelLabel = oddsFeed?.configured ? 'Odds feed connected' : data?.modelVersion === 'data-only' ? 'Data-only mode' : data?.modelVersion || 'Awaiting feed';
+
+  return <>
+    <div className="terminal-grid relative mb-8 overflow-hidden rounded-2xl border border-border px-5 py-7 md:px-8 md:py-9">
+      <div className="absolute right-[-4%] top-[-60%] h-[420px] w-[420px] rounded-full bg-secondary/10 blur-3xl" />
+      <div className="relative flex flex-col justify-between gap-6 md:flex-row md:items-end">
+        <div>
+          <div className="mb-3 flex items-center gap-3"><span className="font-mono text-[10px] uppercase tracking-[.22em] text-primary">Session / 01</span><DataState state={data?.dataStatus?.state} message={data?.dataStatus?.message} compact /></div>
+          <h1 className="max-w-3xl text-4xl font-extrabold leading-[.95] tracking-[-.065em] text-foreground md:text-6xl">Find the edge.<br /><span className="text-primary">Respect the noise.</span></h1>
+          <p className="mt-5 max-w-xl text-sm leading-6 text-muted-foreground">A compact read on tonight&apos;s NHL markets. High-conviction signals stay loud; missing inputs stay visible.</p>
+        </div>
+        <div className="flex w-full flex-col gap-3 md:max-w-[390px]">
+          <LiveAlertsPanel />
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+            <p className="font-mono text-[10px] uppercase tracking-[.16em] text-primary">Model build</p>
+            <p className="mt-2 text-xl font-bold">{modelLabel}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">{oddsFeed?.configured ? 'Sportsbook odds connected; model feed not configured' : 'Sportsbook odds and model feed not configured'}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <StatCard label="Games on slate" value={data?.games ?? '—'} note="Today, scheduled" icon={CalendarDays} />
+      <StatCard label="Live snipes" value={data?.snipes ?? '—'} note="Ranked player edges" accent="purple" icon={Target} />
+      <StatCard label="Players scanned" value={data?.playersAnalyzed ?? '—'} note="Across active markets" accent="pink" icon={Users} />
+      <StatCard label="Top confidence" value={data?.topConfidence || '—'} note="Best current signal" icon={Sparkles} />
+    </div>
+    <div className="grid gap-6 xl:grid-cols-[1.15fr_.85fr]">
+      <section className="signal-shadow rounded-xl border border-border bg-card/70 p-5 md:p-6">
+        <div className="mb-5 flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-primary">Market pulse</p><h2 className="mt-1 text-lg font-bold tracking-[-.03em]">Today&apos;s games</h2></div><Link data-testid="link-all-games" href="/matchups" className="flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-primary">Open lab <ArrowUpRight size={13} /></Link></div>
+        <QueryState loading={today.isLoading} error={today.isError} empty={!today.isLoading && !today.isError && todayGames.length === 0} onRetry={() => today.refetch()}><div className="space-y-2">{todayGames.slice(0, 5).map((game) => <GameRow game={game} key={game.id} />)}</div></QueryState>
+      </section>
+      <section className="signal-shadow rounded-xl border border-border bg-card/70 p-5 md:p-6">
+        <div className="mb-5 flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-secondary">Next slate</p><h2 className="mt-1 text-lg font-bold tracking-[-.03em]">Future games</h2></div><span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{futureGames[0] ? shortDate(futureGames[0].gameDate) : 'Date pending'}</span></div>
+        <QueryState loading={future.isLoading} error={future.isError} empty={!future.isLoading && !future.isError && futureGames.length === 0} onRetry={() => future.refetch()}><div className="space-y-2">{futureGames.slice(0, 5).map((game) => <GameRow game={game} key={game.id} />)}</div></QueryState>
+      </section>
+    </div>
+    <section className="mt-6 rounded-xl border border-border bg-card/70 p-5 md:p-6"><div className="mb-5 flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-accent">Odds by book</p><h2 className="mt-1 text-lg font-bold tracking-[-.03em]">Sportsbook odds</h2></div><span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{oddsFeed?.configured ? 'The Odds API' : 'Not connected'}</span></div><OddsPanel feed={oddsFeed} loading={odds.isLoading} error={odds.isError} onRetry={() => odds.refetch()} /></section>
+    <section className="mt-6 rounded-xl border border-border bg-card/70 p-5 md:p-6"><div className="mb-5 flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-accent">Performance</p><h2 className="mt-1 text-lg font-bold tracking-[-.03em]">Model ledger</h2></div><Link data-testid="link-audit" href="/audit" className="text-xs font-semibold text-muted-foreground hover:text-primary">View audit</Link></div>{data?.marketPerformance?.length ? <div className="space-y-3">{data.marketPerformance.slice(0, 5).map((metric) => <PerformanceRow key={metric.market} metric={metric} />)}</div> : <EmptyState title="Performance pending" body="Historical market performance will appear after scored records land." icon={BarChart3} />}</section>
+    <section className="mt-6 rounded-xl border border-border bg-card/70 p-5 md:p-6"><div className="mb-5 flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-accent">Signal queue</p><h2 className="mt-1 text-lg font-bold tracking-[-.03em]">Highest conviction edges</h2></div><Link data-testid="link-snipes" href="/snipes" className="flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-primary">Rank all <ArrowUpRight size={13} /></Link></div><QueryState loading={snipes.isLoading} error={snipes.isError} empty={!snipes.isLoading && !snipes.isError && topSnipes.length === 0} onRetry={() => snipes.refetch()}><div>{topSnipes.map((snipe) => <SnipeRow key={snipe.id} snipe={snipe} watchlist={watchlist} onWatch={setWatchlist} />)}</div></QueryState></section>
+  </>;
 }
 
 function Home() {
@@ -366,7 +473,7 @@ function GameDetailRoute() {
 }
 
 function Router() {
-  return <ErrorBoundary><AppShell><Switch><Route path="/" component={HomeWithOdds} /><Route path="/snipes" component={SnipesPage} /><Route path="/props" component={PropsPage} /><Route path="/matchups" component={MatchupsPage} /><Route path="/goalies" component={GoaliesPage} /><Route path="/players" component={PlayersPage} /><Route path="/players/:playerId" component={PlayerDetailPage} /><Route path="/teams" component={TeamsPage} /><Route path="/teams/:teamId" component={TeamDetailPage} /><Route path="/watchlist" component={WatchlistPage} /><Route path="/audit" component={AuditPage} /><Route path="/admin" component={AdminPage} /><Route path="/games/:gameId" component={GameDetailRoute} /><Route component={NotFound} /></Switch></AppShell></ErrorBoundary>;
+  return <ErrorBoundary><AppShell><Switch><Route path="/" component={HomeWithLiveAlerts} /><Route path="/snipes" component={SnipesPage} /><Route path="/props" component={PropsPage} /><Route path="/matchups" component={MatchupsPage} /><Route path="/goalies" component={GoaliesPage} /><Route path="/players" component={PlayersPage} /><Route path="/players/:playerId" component={PlayerDetailPage} /><Route path="/teams" component={TeamsPage} /><Route path="/teams/:teamId" component={TeamDetailPage} /><Route path="/watchlist" component={WatchlistPage} /><Route path="/audit" component={AuditPage} /><Route path="/admin" component={AdminPage} /><Route path="/games/:gameId" component={GameDetailRoute} /><Route component={NotFound} /></Switch></AppShell></ErrorBoundary>;
 }
 
 function App() {

@@ -26,6 +26,14 @@ router.get("/dashboard/summary", async (_req, res) => {
   }
 });
 
+router.get("/live-alerts", async (_req, res) => {
+  try {
+    res.json(await getNhlProvider().getLiveAlerts());
+  } catch (error) {
+    handleProviderError(res, error);
+  }
+});
+
 router.get("/games", async (req, res) => {
   try {
     const query = GetGamesQueryParams.parse({

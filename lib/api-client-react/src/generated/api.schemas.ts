@@ -110,6 +110,14 @@ export interface DashboardSummary {
   marketPerformance: ModelPerformance[];
 }
 
+export type LiveAlertsState = typeof LiveAlertsState[keyof typeof LiveAlertsState];
+
+
+export const LiveAlertsState = {
+  live: 'live',
+  waiting: 'waiting',
+} as const;
+
 export interface Team {
   id: string;
   name: string;
@@ -126,6 +134,40 @@ export interface Team {
   primaryColor: string | null;
   /** @nullable */
   secondaryColor: string | null;
+}
+
+export type LiveGoalAlertScorer = {
+  id: string;
+  fullName: string;
+  /** @nullable */
+  jerseyNumber: number | null;
+  /** @nullable */
+  headshotUrl: string | null;
+};
+
+export interface LiveGoalAlert {
+  id: string;
+  gameId: string;
+  gameDate: string;
+  awayTeam: Team;
+  homeTeam: Team;
+  scoringTeam: Team;
+  scorer: LiveGoalAlertScorer;
+  periodNumber: number;
+  periodLabel: string;
+  timeInPeriod: string;
+  /** @nullable */
+  awayScore: number | null;
+  /** @nullable */
+  homeScore: number | null;
+  /** @nullable */
+  strength: string | null;
+}
+
+export interface LiveAlerts {
+  state: LiveAlertsState;
+  updatedAt: string;
+  alerts: LiveGoalAlert[];
 }
 
 export interface Player {

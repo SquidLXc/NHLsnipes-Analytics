@@ -58,6 +58,66 @@ export const GetDashboardSummaryResponse = zod.object({
 
 
 /**
+ * Returns confirmed scoring events from games currently in progress.
+ * @summary Get live goal alerts
+ */
+export const GetLiveAlertsResponse = zod.object({
+  "state": zod.enum(['live', 'waiting']),
+  "updatedAt": zod.coerce.date(),
+  "alerts": zod.array(zod.object({
+  "id": zod.string(),
+  "gameId": zod.string(),
+  "gameDate": zod.coerce.date(),
+  "awayTeam": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "city": zod.string().nullable(),
+  "abbreviation": zod.string(),
+  "conference": zod.string().nullable(),
+  "division": zod.string().nullable(),
+  "logoUrl": zod.string().url().nullable(),
+  "primaryColor": zod.string().nullable(),
+  "secondaryColor": zod.string().nullable()
+}),
+  "homeTeam": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "city": zod.string().nullable(),
+  "abbreviation": zod.string(),
+  "conference": zod.string().nullable(),
+  "division": zod.string().nullable(),
+  "logoUrl": zod.string().url().nullable(),
+  "primaryColor": zod.string().nullable(),
+  "secondaryColor": zod.string().nullable()
+}),
+  "scoringTeam": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "city": zod.string().nullable(),
+  "abbreviation": zod.string(),
+  "conference": zod.string().nullable(),
+  "division": zod.string().nullable(),
+  "logoUrl": zod.string().url().nullable(),
+  "primaryColor": zod.string().nullable(),
+  "secondaryColor": zod.string().nullable()
+}),
+  "scorer": zod.object({
+  "id": zod.string(),
+  "fullName": zod.string(),
+  "jerseyNumber": zod.number().int().nullable(),
+  "headshotUrl": zod.string().url().nullable()
+}),
+  "periodNumber": zod.number().int(),
+  "periodLabel": zod.string(),
+  "timeInPeriod": zod.string(),
+  "awayScore": zod.number().int().nullable(),
+  "homeScore": zod.number().int().nullable(),
+  "strength": zod.string().nullable()
+}))
+})
+
+
+/**
  * @summary List games
  */
 export const GetGamesQueryParams = zod.object({
