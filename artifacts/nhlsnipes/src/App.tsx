@@ -396,10 +396,8 @@ function PropCard({ prop }: { prop: Prop }) {
 
 function MatchupsPage() {
   const [location] = useLocation();
-  const selectedGameId = useMemo(() => {
-    const params = new URLSearchParams(location.split('?')[1] || '');
-    return params.get('game') || '';
-  }, [location]);
+  const params = new URLSearchParams(location.split('?')[1] || '');
+  const selectedGameId = params.get('game') || '';
   const query = useGetMatchups({ query: { queryKey: getGetMatchupsQueryKey() } });
   const gamesQuery = useGetGames(undefined, { query: { queryKey: getGetGamesQueryKey() } });
   const selectedQuery = useGetMatchup(selectedGameId, {
