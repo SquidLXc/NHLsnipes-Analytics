@@ -144,6 +144,8 @@ const ASSET_BASE_URL =
   process.env.NHLSNIPES_ASSET_BASE_URL?.replace(/\/$/, "") || null;
 const NHL_SEASON_START_DATE =
   process.env.NHLSNIPES_SEASON_START_DATE || "2026-09-29";
+const INCLUDE_PRESEASON =
+  process.env.NHLSNIPES_INCLUDE_PRESEASON !== "false";
 const syncHealth: DataHealth = {
   provider: "NHL Web API",
   connection: "connected",
@@ -300,14 +302,18 @@ class NhlWebApiProvider implements NhlDataProvider {
     const raw = await this.fetchJson<{ games?: RawGame[] }>(date ? `score/${date}` : "score/now");
     const verifiedGames = (raw.games ?? []).filter((game) => {
       const gameDate = (game.gameDate || game.startTimeUTC || "").slice(0, 10);
-      return gameDate >= NHL_SEASON_START_DATE;
+      return INCLUDE_PRESEASON || gameDate >= NHL_SEASON_START_DATE;
     });
     return GetGamesResponse.parse(verifiedGames.map(gameFromRaw));
   }
 
   async getFutureGames() {
     const today = dateOnly(new Date());
-    const firstDate = today >= NHL_SEASON_START_DATE ? addDays(today, 1) : NHL_SEASON_START_DATE;
+    const firstDate = INCLUDE_PRESEASON
+      ? addDays(today, 1)
+      : today >= NHL_SEASON_START_DATE
+        ? addDays(today, 1)
+        : NHL_SEASON_START_DATE;
     for (let offset = 0; offset < 14; offset += 1) {
       const games = await this.getGames(addDays(firstDate, offset));
       if (games.length) return games;
@@ -529,8 +535,8 @@ class NhlWebApiProvider implements NhlDataProvider {
         provider: this.name,
         lastUpdated: new Date().toISOString(),
         message: games.length > 0
-          ? `Official NHL schedule, standings, roster and player data is available. ${process.env.ODDS_API_KEY ? "Sportsbook odds are connected." : "Sportsbook odds are not configured."} Model feed is not configured.`
-          : `Official NHL data is connected, but no verified games are scheduled before ${NHL_SEASON_START_DATE}. ${process.env.ODDS_API_KEY ? "Sportsbook odds are connected when markets are posted." : "Sportsbook odds are not configured."} Model feed is not configured.`,
+          ? `Official NHL schedule, including preseason when available, standings, roster and player data is available. ${process.env.ODDS_API_KEY ? "Sportsbook odds are connected." : "Sportsbook odds are not configured."} Model feed is not configured.`
+          : `Official NHL data is connected, but no verified games were returned for today's NHL date. ${INCLUDE_PRESEASON ? "Preseason is included when the provider publishes it." : `Preseason is excluded before ${NHL_SEASON_START_DATE}.`} ${process.env.ODDS_API_KEY ? "Sportsbook odds are connected when markets are posted." : "Sportsbook odds are not configured."} Model feed is not configured.`,
       },
       games: games.length,
       snipes: 0,

@@ -8,7 +8,7 @@ The default live adapter is the public NHL Web API at `https://api-web.nhle.com/
 
 Team crest and player headshot fields are provider-supplied references only. NHLsnipes does not download or bundle NHL-owned images in the repository. A deployment must confirm that its selected provider permits displaying and caching those references for the intended audience. The provider adapter can be replaced through `NHLSNIPES_NHL_API_BASE_URL` or a permitted `NHLSNIPES_PROVIDER_URL` without changing frontend components.
 
-The concrete base URL is configured with `NHLSNIPES_NHL_API_BASE_URL`. The app also requires a verified season boundary through `NHLSNIPES_SEASON_START_DATE`; records earlier than that date are discarded rather than shown as current games.
+The concrete base URL is configured with `NHLSNIPES_NHL_API_BASE_URL`. Preseason is included by default with `NHLSNIPES_INCLUDE_PRESEASON=true`, so verified preseason games appear in today's and future slates. Set it to `false` to enforce the regular-season boundary in `NHLSNIPES_SEASON_START_DATE`.
 If a permitted provider returns relative asset references, set `NHLSNIPES_ASSET_BASE_URL` to the approved asset host. Absolute provider URLs are passed through; relative references are ignored unless that base is configured.
 
 ## Provider contract

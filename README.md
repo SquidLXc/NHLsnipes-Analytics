@@ -10,7 +10,7 @@ pnpm --filter @workspace/api-server run dev
 pnpm --filter @workspace/nhlsnipes run dev
 ```
 
-The managed workflows provide the required `PORT` and `BASE_PATH` values for Replit previews. The API uses the NHL Web API base configured by `NHLSNIPES_NHL_API_BASE_URL`; it never substitutes fake or random NHL data. `ODDS_API_KEY` is server-only and enables sportsbook prices from The Odds API.
+The managed workflows provide the required `PORT` and `BASE_PATH` values for Replit previews. The API uses the NHL Web API base configured by `NHLSNIPES_NHL_API_BASE_URL`; it includes verified preseason games by default and never substitutes fake or random NHL data. Set `NHLSNIPES_INCLUDE_PRESEASON=false` only if the regular-season cutoff is required. `ODDS_API_KEY` is server-only and enables sportsbook prices from The Odds API.
 
 ## Production
 
