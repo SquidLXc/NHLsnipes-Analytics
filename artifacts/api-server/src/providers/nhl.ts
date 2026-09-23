@@ -270,6 +270,10 @@ function gameFromRaw(raw: RawGame) {
     venue: raw.venue?.default ?? null,
     status: status(raw.gameState),
     statusDetail: raw.gameState ?? null,
+    awayScore: raw.awayTeam.score ?? null,
+    homeScore: raw.homeTeam.score ?? null,
+    period: (raw as any).periodDescriptor?.periodType ?? (raw as any).period?.periodLabel ?? null,
+    clock: (raw as any).clock?.timeRemaining ?? (raw as any).periodDescriptor?.clock ?? null,
     matchupScore:
       typeof raw.awayTeam.score === "number" && typeof raw.homeTeam.score === "number"
         ? raw.awayTeam.score + raw.homeTeam.score

@@ -19,6 +19,14 @@ export interface Game {
   /** @nullable */
   statusDetail: string | null;
   /** @nullable */
+  awayScore: number | null;
+  /** @nullable */
+  homeScore: number | null;
+  /** @nullable */
+  period: string | null;
+  /** @nullable */
+  clock: string | null;
+  /** @nullable */
   matchupScore: number | null;
   /** @nullable */
   goalEnvironment: number | null;

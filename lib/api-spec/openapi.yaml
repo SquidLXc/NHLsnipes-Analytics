@@ -553,12 +553,16 @@ components:
           type: string
           enum: [scheduled, live, final, postponed, unknown]
         statusDetail: { type: ["string", "null"] }
+        awayScore: { type: ["integer", "null"] }
+        homeScore: { type: ["integer", "null"] }
+        period: { type: ["string", "null"] }
+        clock: { type: ["string", "null"] }
         matchupScore: { type: ["number", "null"] }
         goalEnvironment: { type: ["number", "null"] }
         shotEnvironment: { type: ["number", "null"] }
         powerPlayEdge: { type: ["number", "null"] }
         goaltendingEdge: { type: ["number", "null"] }
-      required: [id, gameDate, awayTeam, homeTeam, venue, status, statusDetail, matchupScore, goalEnvironment, shotEnvironment, powerPlayEdge, goaltendingEdge]
+      required: [id, gameDate, awayTeam, homeTeam, venue, status, statusDetail, awayScore, homeScore, period, clock, matchupScore, goalEnvironment, shotEnvironment, powerPlayEdge, goaltendingEdge]
     GameDetail:
       allOf:
         - $ref: "#/components/schemas/Game"

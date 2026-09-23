@@ -423,7 +423,25 @@ function SelectedMatchup({ matchup }: { matchup: MatchupDetail }) {
       </div>
       <div className="flex items-center justify-between gap-4">
         <div className="flex flex-1 flex-col items-center gap-2"><TeamMark team={away.team} size="lg" /><p className="text-sm font-bold">{away.team.name}</p><p className="font-mono text-xs text-muted-foreground">away</p></div>
-        <div className="text-center"><div className="font-mono text-2xl font-medium text-secondary">{fmt(game.matchupScore)}</div><div className="mt-1 text-[9px] uppercase tracking-widest text-muted-foreground">matchup score</div></div>
+        <div className="text-center">
+          {game.status === 'live' || game.status === 'final' ? (
+            <>
+              <div className="flex items-center gap-4">
+                <div className="font-mono text-4xl font-bold">{game.awayScore ?? 0}</div>
+                <div className="text-muted-foreground">-</div>
+                <div className="font-mono text-4xl font-bold">{game.homeScore ?? 0}</div>
+              </div>
+              {game.status === 'live' && (
+                <div className="mt-2 text-[10px] uppercase tracking-widest text-accent">
+                  {game.period} {game.clock ? `· ${game.clock}` : ''}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="font-mono text-2xl font-medium text-secondary">{fmt(game.matchupScore)}</div>
+          )}
+          <div className="mt-1 text-[9px] uppercase tracking-widest text-muted-foreground">{game.status === 'live' || game.status === 'final' ? 'score' : 'matchup score'}</div>
+        </div>
         <div className="flex flex-1 flex-col items-center gap-2"><TeamMark team={home.team} size="lg" /><p className="text-sm font-bold">{home.team.name}</p><p className="font-mono text-xs text-muted-foreground">home</p></div>
       </div>
       <div className="mt-6 grid grid-cols-2 gap-2 border-t border-border pt-4 md:grid-cols-4">{[['Goal env.', game.goalEnvironment], ['Shot env.', game.shotEnvironment], ['PP edge', game.powerPlayEdge], ['Goalie', game.goaltendingEdge]].map(([label, value]) => <div key={String(label)} className="text-center"><p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{label}</p><p className="mt-1 text-sm font-bold">{fmt(value as number | null)}</p></div>)}</div>
@@ -452,8 +470,8 @@ function MatchupPlayerCard({ player }: { player: MatchupPlayer }) {
 
 function MatchupCard({ matchup }: { matchup: Matchup }) {
   const { game, away, home } = matchup;
-  const score = game.matchupScore;
-  return <Link data-testid={`card-matchup-${game.id}`} href={`/matchups?game=${game.id}`} className="group rounded-xl border border-border bg-card/70 p-5 hover:border-secondary/40"><div className="mb-5 flex items-center justify-between"><span className="font-mono text-[10px] uppercase tracking-[.14em] text-muted-foreground">{shortDate(game.gameDate)} · {time(game.gameDate)}</span><span className={`rounded-full px-2 py-1 text-[9px] uppercase ${game.status === 'live' ? 'bg-accent/10 text-accent' : 'bg-muted text-muted-foreground'}`}>{game.status}</span></div><div className="flex items-center justify-between gap-4"><div className="flex flex-1 flex-col items-center gap-2"><TeamMark team={away.team} size="lg" /><p className="text-sm font-bold">{away.team.name}</p><p className="font-mono text-xs text-muted-foreground">away</p></div><div className="text-center"><div className="font-mono text-2xl font-medium text-secondary">{fmt(score)}</div><div className="mt-1 text-[9px] uppercase tracking-widest text-muted-foreground">matchup score</div></div><div className="flex flex-1 flex-col items-center gap-2"><TeamMark team={home.team} size="lg" /><p className="text-sm font-bold">{home.team.name}</p><p className="font-mono text-xs text-muted-foreground">home</p></div></div><div className="mt-6 grid grid-cols-4 gap-2 border-t border-border pt-4">{[['Goal env.', game.goalEnvironment], ['Shot env.', game.shotEnvironment], ['PP edge', game.powerPlayEdge], ['Goalie', game.goaltendingEdge]].map(([label, value]) => <div key={String(label)} className="text-center"><p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{label}</p><p className="mt-1 text-sm font-bold">{fmt(value as number | null)}</p></div>)}</div></Link>;
+  const showLiveScore = game.status === 'live' || game.status === 'final';
+  return <Link data-testid={`card-matchup-${game.id}`} href={`/matchups?game=${game.id}`} className="group rounded-xl border border-border bg-card/70 p-5 hover:border-secondary/40"><div className="mb-5 flex items-center justify-between"><span className="font-mono text-[10px] uppercase tracking-[.14em] text-muted-foreground">{shortDate(game.gameDate)} · {time(game.gameDate)}</span><span className={`rounded-full px-2 py-1 text-[9px] uppercase ${game.status === 'live' ? 'bg-accent/10 text-accent' : 'bg-muted text-muted-foreground'}`}>{game.status}</span></div><div className="flex items-center justify-between gap-4"><div className="flex flex-1 flex-col items-center gap-2"><TeamMark team={away.team} size="lg" /><p className="text-sm font-bold">{away.team.name}</p><p className="font-mono text-xs text-muted-foreground">away</p></div><div className="text-center">{showLiveScore ? (<><div className="flex items-center gap-3"><div className="font-mono text-3xl font-bold">{game.awayScore ?? 0}</div><div className="text-muted-foreground">-</div><div className="font-mono text-3xl font-bold">{game.homeScore ?? 0}</div></div>{game.status === 'live' && game.period && (<div className="mt-1 text-[9px] uppercase text-accent">{game.period} {game.clock ? `· ${game.clock}` : ''}</div>)}</>) : (<><div className="font-mono text-2xl font-medium text-secondary">{fmt(game.matchupScore)}</div><div className="mt-1 text-[9px] uppercase tracking-widest text-muted-foreground">matchup score</div></>)}</div><div className="flex flex-1 flex-col items-center gap-2"><TeamMark team={home.team} size="lg" /><p className="text-sm font-bold">{home.team.name}</p><p className="font-mono text-xs text-muted-foreground">home</p></div></div><div className="mt-6 grid grid-cols-4 gap-2 border-t border-border pt-4">{[['Goal env.', game.goalEnvironment], ['Shot env.', game.shotEnvironment], ['PP edge', game.powerPlayEdge], ['Goalie', game.goaltendingEdge]].map(([label, value]) => <div key={String(label)} className="text-center"><p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{label}</p><p className="mt-1 text-sm font-bold">{fmt(value as number | null)}</p></div>)}</div></Link>;
 }
 
 function GoaliesPage() {
