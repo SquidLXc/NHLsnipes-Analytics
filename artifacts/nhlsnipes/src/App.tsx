@@ -3,7 +3,7 @@ import { Link, Route, Router as WouterRouter, Switch, useLocation, useParams, us
 import {
   Activity, ArrowUpRight, BarChart3, Bell, BrainCircuit, CalendarDays, Check, ChevronRight,
   CircleAlert, Clock3, Database, ExternalLink, Gauge, Goal, Heart, Info, Menu, RefreshCw,
-  Search, Shield, SlidersHorizontal, Sparkles, Star, Target, TrendingUp, Trophy, Users, X, Zap
+  Search, Shield, SlidersHorizontal, Sparkles, Star, Target, TrendingUp, Trophy, Users, X, Zap, Instagram
 } from 'lucide-react';
 import {
   getGetAuditQueryKey, getGetDashboardSummaryQueryKey, getGetFutureGamesQueryKey, getGetGameQueryKey, getGetGamesQueryKey, getGetMatchupQueryKey, getGetOddsQueryKey,
@@ -102,7 +102,33 @@ function AppShell({ children }: { children: React.ReactNode }) {
     <aside className={`fixed inset-y-0 left-0 z-40 flex w-[244px] flex-col border-r border-sidebar-border bg-sidebar transition-transform md:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
       <div className="flex h-[76px] items-center border-b border-sidebar-border px-6"><Link data-testid="link-brand" href="/" className="flex items-center gap-3"><span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-primary text-primary-foreground"><Zap size={16} fill="currentColor" /></span><span><span className="block font-mono text-[14px] font-medium tracking-[-.04em] text-foreground">NHL<span className="text-primary">snipes</span></span><span className="mt-0.5 block font-mono text-[8px] tracking-[.08em] text-muted-foreground">build by SquidLxc</span></span></Link></div>
       <nav className="flex-1 space-y-1 px-3 py-5">{nav.map((item) => { const Icon = item.icon; const active = location === item.href || (item.href !== '/' && location.startsWith(item.href)); return <Link data-testid={`link-nav-${item.label.toLowerCase().replace(/\s/g, '-')}`} href={item.href} key={item.href} onClick={() => setOpen(false)} className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-[12px] font-semibold transition-colors ${active ? 'bg-primary/10 text-primary' : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground'}`}><Icon size={16} strokeWidth={active ? 2.4 : 1.7} /><span>{item.label}</span>{item.hot && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_12px_hsl(var(--accent))]" />}</Link> })}</nav>
-      <div className="border-t border-sidebar-border p-4"><Link data-testid="link-admin" href="/admin" className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs ${location === '/admin' ? 'bg-secondary/10 text-secondary' : 'text-sidebar-foreground hover:bg-sidebar-accent'}`}><SlidersHorizontal size={15} /><span>Ops / data health</span></Link><div className="mt-5 flex items-center gap-2 px-3 text-[10px] font-mono uppercase tracking-[.12em] text-muted-foreground"><span className="h-1.5 w-1.5 rounded-full bg-primary" />Terminal online</div></div>
+      <div className="border-t border-sidebar-border p-4">
+        <div className="mb-4 space-y-2">
+          <p className="px-3 text-[10px] font-mono uppercase tracking-[.12em] text-muted-foreground">Join Community</p>
+          <a 
+            href="https://discord.gg/QJ9njj9wm7" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+          >
+            <svg width="16" height="16" viewBox="0 0 127.14 96.36" fill="currentColor">
+              <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/>
+            </svg>
+            <span>Join Discord</span>
+            <ExternalLink size={12} className="ml-auto opacity-50" />
+          </a>
+          <a 
+            href="https://www.instagram.com/topcapperz/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+          >
+            <Instagram size={16} />
+            <span>Daily Plays</span>
+            <ExternalLink size={12} className="ml-auto opacity-50" />
+          </a>
+        </div>
+        <Link data-testid="link-admin" href="/admin" className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs ${location === '/admin' ? 'bg-secondary/10 text-secondary' : 'text-sidebar-foreground hover:bg-sidebar-accent'}`}><SlidersHorizontal size={15} /><span>Ops / data health</span></Link><div className="mt-5 flex items-center gap-2 px-3 text-[10px] font-mono uppercase tracking-[.12em] text-muted-foreground"><span className="h-1.5 w-1.5 rounded-full bg-primary" />Terminal online</div></div>
     </aside>
     {open && <button data-testid="button-close-menu" aria-label="Close menu" onClick={() => setOpen(false)} className="fixed inset-0 z-30 bg-background/70 backdrop-blur-sm md:hidden"><X className="absolute right-5 top-5 text-muted-foreground" /></button>}
     <div className="md:pl-[244px]"><header className="sticky top-0 z-20 flex h-[76px] items-center justify-between border-b border-border/80 bg-background/90 px-4 backdrop-blur-xl md:px-8"><button data-testid="button-open-menu" aria-label="Open menu" onClick={() => setOpen(true)} className="rounded-lg border border-border p-2 text-muted-foreground md:hidden"><Menu size={18} /></button><div className="hidden items-center gap-2 text-[10px] font-mono uppercase tracking-[.16em] text-muted-foreground md:flex"><span className="text-primary">NHL /</span> Decision terminal <span className="mx-1 text-border">•</span> {shortDate(new Date().toISOString())}</div><div className="ml-auto flex items-center gap-2"><button data-testid="button-notifications" className="rounded-lg border border-border p-2 text-muted-foreground hover:border-primary/40 hover:text-primary"><Bell size={16} /></button><Link data-testid="link-admin-top" href="/admin" className="hidden items-center gap-2 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold text-muted-foreground hover:border-primary/40 hover:text-foreground sm:flex"><span className={`h-2 w-2 rounded-full ${dataHealth.data?.lastSuccessfulSync ? 'bg-primary' : 'bg-accent'}`} />{feedLabel}</Link></div></header><main className="mx-auto max-w-[1440px] px-4 py-7 md:px-8 md:py-9">{children}</main><footer className="border-t border-border/80 px-4 py-6 text-[10px] leading-5 text-muted-foreground md:px-8"><p>NHLsnipes is an independent sports analytics platform and is not affiliated with or endorsed by the National Hockey League.</p><p>Analytics are informational and do not guarantee outcomes.</p></footer></div>
