@@ -241,11 +241,14 @@ function HomeWithLiveAlerts() {
     )}
     <div className="terminal-grid relative mb-8 overflow-hidden rounded-2xl border border-border px-5 py-7 md:px-8 md:py-9">
       <div className="absolute right-[-4%] top-[-60%] h-[420px] w-[420px] rounded-full bg-secondary/10 blur-3xl" />
-      <div className="relative flex flex-col justify-between gap-6 md:flex-row md:items-end">
-        <div>
+      <div className="relative flex flex-col justify-between gap-6 md:flex-row md:items-center">
+        <div className="flex-1">
           <div className="mb-3 flex items-center gap-3"><span className="font-mono text-[10px] uppercase tracking-[.22em] text-primary">Session / 01</span><DataState state={data?.dataStatus?.state} message={data?.dataStatus?.message} compact /></div>
           <h1 className="max-w-3xl text-4xl font-extrabold leading-[.95] tracking-[-.065em] text-foreground md:text-6xl">Find the edge.<br /><span className="text-primary">Respect the noise.</span></h1>
           <p className="mt-5 max-w-xl text-sm leading-6 text-muted-foreground">A compact read on tonight&apos;s NHL markets. High-conviction signals stay loud; missing inputs stay visible.</p>
+        </div>
+        <div className="hidden lg:flex lg:items-center lg:justify-center lg:px-6">
+          <img src="/nhlsnipes-logo.png" alt="NHLsnipes" className="w-48 h-48 object-contain opacity-90 hover:opacity-100 transition-opacity" />
         </div>
         <div className="flex w-full flex-col gap-3 md:max-w-[390px]">
           <LiveAlertsPanel />
