@@ -386,8 +386,10 @@ class NhlWebApiProvider implements NhlDataProvider {
             const periodNumber = period.periodDescriptor?.number ?? 0;
             return (period.goals ?? []).flatMap((goal) => {
               if (goal.eventId === undefined || goal.playerId === undefined || !goal.teamAbbrev) return [];
+              const teamAbbrev = typeof goal.teamAbbrev === 'string' ? goal.teamAbbrev : goal.teamAbbrev?.default;
+              if (!teamAbbrev) return [];
               const scoringTeam = [game.awayTeam, game.homeTeam].find(
-                (team) => team.abbreviation.toLowerCase() === goal.teamAbbrev?.toLowerCase(),
+                (team) => team.abbreviation.toLowerCase() === teamAbbrev.toLowerCase(),
               );
               if (!scoringTeam) return [];
               const player = playersById.get(String(goal.playerId));
