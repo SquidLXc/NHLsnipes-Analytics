@@ -106,9 +106,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         <div className="mb-4 space-y-2">
           <p className="px-3 text-[10px] font-mono uppercase tracking-[.12em] text-muted-foreground">Join Community</p>
           <a 
-            href="https://discord.gg/QJ9njj9wm7" 
-            target="_blank" 
-            rel="noopener noreferrer"
+            href="/api/auth/discord/login" 
             className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
           >
             <svg width="16" height="16" viewBox="0 0 127.14 96.36" fill="currentColor">
@@ -202,6 +200,8 @@ function LiveAlertsPanel() {
 }
 
 function HomeWithLiveAlerts() {
+  const [searchParams] = useState(() => new URLSearchParams(window.location.search));
+  const discordStatus = searchParams.get('discord');
   const summary = useGetDashboardSummary({ query: { queryKey: getGetDashboardSummaryQueryKey() } });
   const today = useGetTodayGames({ query: { queryKey: getGetTodayGamesQueryKey() } });
   const future = useGetFutureGames({ query: { queryKey: getGetFutureGamesQueryKey() } });
