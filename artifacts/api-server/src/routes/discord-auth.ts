@@ -79,6 +79,7 @@ router.get("/callback", async (req, res) => {
     const userId = userData.id;
 
     // Add user to guild
+    console.log(`Attempting to add user ${userId} to guild ${DISCORD_GUILD_ID}`);
     const addMemberResponse = await fetch(
       `https://discord.com/api/guilds/${DISCORD_GUILD_ID}/members/${userId}`,
       {
@@ -91,19 +92,23 @@ router.get("/callback", async (req, res) => {
       }
     );
 
+    console.log(`Add member response status: ${addMemberResponse.status}`);
+    
     if (!addMemberResponse.ok) {
       const errorText = await addMemberResponse.text();
-      console.error("Failed to add user to guild:", errorText);
+      console.error("Failed to add user to guild:", addMemberResponse.status, errorText);
       // User might already be in server - that's okay
       if (addMemberResponse.status === 204 || errorText.includes("already")) {
+        console.log("User already in server");
         res.redirect("/?discord=already_joined");
         return;
       }
-      res.redirect("/?discord=error");
+      res.redirect(`/?discord=error&code=${addMemberResponse.status}`);
       return;
     }
 
     // Success!
+    console.log("Successfully added user to guild");
     res.redirect("/?discord=success");
   } catch (error) {
     console.error("Discord OAuth error:", error);

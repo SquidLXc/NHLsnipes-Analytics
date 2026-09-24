@@ -202,6 +202,7 @@ function LiveAlertsPanel() {
 function HomeWithLiveAlerts() {
   const [searchParams] = useState(() => new URLSearchParams(window.location.search));
   const discordStatus = searchParams.get('discord');
+  const [showDiscordToast, setShowDiscordToast] = useState(!!discordStatus);
   const summary = useGetDashboardSummary({ query: { queryKey: getGetDashboardSummaryQueryKey() } });
   const today = useGetTodayGames({ query: { queryKey: getGetTodayGamesQueryKey() } });
   const future = useGetFutureGames({ query: { queryKey: getGetFutureGamesQueryKey() } });
@@ -215,7 +216,29 @@ function HomeWithLiveAlerts() {
   const futureGames = (future.data as Game[] | undefined) || [];
   const modelLabel = oddsFeed?.configured ? 'Odds feed connected' : data?.modelVersion === 'data-only' ? 'Data-only mode' : data?.modelVersion || 'Awaiting feed';
 
+  const discordMessage = discordStatus === 'success' 
+    ? '✅ Successfully joined Discord server!' 
+    : discordStatus === 'already_joined'
+    ? '✅ You are already a member of the Discord server'
+    : discordStatus === 'error'
+    ? '❌ Failed to join Discord. Please try again or use the invite link.'
+    : null;
+
+  const errorCode = searchParams.get('code');
+
   return <>
+    {showDiscordToast && discordMessage && (
+      <div className="mb-6 flex items-center justify-between rounded-xl border border-primary/30 bg-primary/10 px-5 py-4">
+        <div className="flex items-center gap-3">
+          {discordStatus === 'error' ? <CircleAlert className="text-destructive" size={20} /> : <Check className="text-accent" size={20} />}
+          <p className="text-sm font-semibold">{discordMessage}</p>
+          {errorCode && <span className="font-mono text-xs text-muted-foreground">Error code: {errorCode}</span>}
+        </div>
+        <button onClick={() => setShowDiscordToast(false)} className="text-muted-foreground hover:text-foreground">
+          <X size={18} />
+        </button>
+      </div>
+    )}
     <div className="terminal-grid relative mb-8 overflow-hidden rounded-2xl border border-border px-5 py-7 md:px-8 md:py-9">
       <div className="absolute right-[-4%] top-[-60%] h-[420px] w-[420px] rounded-full bg-secondary/10 blur-3xl" />
       <div className="relative flex flex-col justify-between gap-6 md:flex-row md:items-end">
