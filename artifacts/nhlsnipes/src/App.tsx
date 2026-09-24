@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, Route, Router as WouterRouter, Switch, useLocation, useParams } from 'wouter';
+import { Link, Route, Router as WouterRouter, Switch, useLocation, useParams, useSearch } from 'wouter';
 import {
   Activity, ArrowUpRight, BarChart3, Bell, BrainCircuit, CalendarDays, Check, ChevronRight,
   CircleAlert, Clock3, Database, ExternalLink, Gauge, Goal, Heart, Info, Menu, RefreshCw,
@@ -395,8 +395,8 @@ function PropCard({ prop }: { prop: Prop }) {
 }
 
 function MatchupsPage() {
-  const [location] = useLocation();
-  const params = new URLSearchParams(location.split('?')[1] || '');
+  const searchString = useSearch();
+  const params = new URLSearchParams(searchString);
   const selectedGameId = params.get('game') || '';
   const query = useGetMatchups({ query: { queryKey: getGetMatchupsQueryKey() } });
   const gamesQuery = useGetGames(undefined, { query: { queryKey: getGetGamesQueryKey() } });
