@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { nhlProvider } from "../providers/nhl";
+import { getNhlProvider } from "../providers/nhl";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -8,6 +8,7 @@ const router: IRouter = Router();
 router.post("/sync", async (_req, res) => {
   try {
     logger.info("Starting manual NHL data sync");
+    const nhlProvider = getNhlProvider();
     const report = await nhlProvider.sync();
     logger.info("NHL data sync completed", { report });
     
