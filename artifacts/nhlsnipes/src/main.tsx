@@ -12,6 +12,7 @@ const queryClient = new QueryClient({
       staleTime: 30_000,
       retry: 1,
       refetchOnWindowFocus: false,
+      refetchIntervalInBackground: true, // Allow polling even when tab is not focused
     },
   },
 });

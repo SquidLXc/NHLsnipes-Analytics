@@ -151,7 +151,7 @@ function LiveAlertsPanel() {
   const query = useGetLiveAlerts({
     query: {
       queryKey: getGetLiveAlertsQueryKey(),
-      refetchInterval: 30_000,
+      refetchInterval: 15_000, // Poll every 15 seconds for live goals
     },
   });
   const feed = query.data as LiveAlerts | undefined;
