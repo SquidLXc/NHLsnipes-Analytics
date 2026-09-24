@@ -35,7 +35,10 @@ app.use("/api", router);
 
 if (process.env.SERVE_FRONTEND === "true") {
   const frontendRoot = path.resolve(process.cwd(), "artifacts/nhlsnipes/dist/public");
+  logger.info({ frontendRoot, exists: existsSync(frontendRoot) }, "Checking frontend directory");
   if (existsSync(frontendRoot)) {
+    const logoPath = path.join(frontendRoot, "nhlsnipes-logo.png");
+    logger.info({ logoPath, exists: existsSync(logoPath) }, "Checking logo file");
     app.use(express.static(frontendRoot, { index: "index.html" }));
     app.use((req, res, next) => {
       if (req.method === "GET" && !req.path.startsWith("/api") && !path.extname(req.path)) {
