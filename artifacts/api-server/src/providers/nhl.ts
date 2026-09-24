@@ -376,45 +376,97 @@ class NhlWebApiProvider implements NhlDataProvider {
     const playersById = new Map(players.map((player) => [player.id, player]));
     const alertsByGame = await Promise.all(
       liveGames.map(async (game) => {
-        const landing = await this.fetchJson<RawGameLanding>(
-          `gamecenter/${encodeURIComponent(game.id)}/landing`,
-        );
-        const scoring = landing.summary?.scoring ?? [];
-        return scoring.flatMap((period) => {
-          const periodNumber = period.periodDescriptor?.number ?? 0;
-          return (period.goals ?? []).flatMap((goal) => {
-            if (goal.eventId === undefined || goal.playerId === undefined || !goal.teamAbbrev) return [];
-            const scoringTeam = [game.awayTeam, game.homeTeam].find(
-              (team) => team.abbreviation.toLowerCase() === goal.teamAbbrev?.toLowerCase(),
-            );
-            if (!scoringTeam) return [];
-            const player = playersById.get(String(goal.playerId));
-            const fullName =
-              goal.name?.default ||
-              `${goal.firstName?.default ?? ""} ${goal.lastName?.default ?? ""}`.trim() ||
-              "Unknown scorer";
-            return [{
-              id: `${game.id}:${goal.eventId}`,
-              gameId: game.id,
-              gameDate: game.gameDate,
-              awayTeam: game.awayTeam,
-              homeTeam: game.homeTeam,
-              scoringTeam,
-              scorer: {
-                id: String(goal.playerId),
-                fullName,
-                jerseyNumber: goal.sweaterNumber ?? player?.jerseyNumber ?? null,
-                headshotUrl: assetUrl(goal.headshot) ?? player?.headshotUrl ?? null,
-              },
-              periodNumber,
-              periodLabel: periodLabel(periodNumber, period.periodDescriptor?.periodType),
-              timeInPeriod: goal.timeInPeriod ?? "time unavailable",
-              awayScore: goal.awayScore ?? null,
-              homeScore: goal.homeScore ?? null,
-              strength: goal.strength ?? null,
-            }];
+        try {
+          // Try new API first
+          const landing = await this.fetchJson<RawGameLanding>(
+            `gamecenter/${encodeURIComponent(game.id)}/landing`,
+          );
+          const scoring = landing.summary?.scoring ?? [];
+          return scoring.flatMap((period) => {
+            const periodNumber = period.periodDescriptor?.number ?? 0;
+            return (period.goals ?? []).flatMap((goal) => {
+              if (goal.eventId === undefined || goal.playerId === undefined || !goal.teamAbbrev) return [];
+              const scoringTeam = [game.awayTeam, game.homeTeam].find(
+                (team) => team.abbreviation.toLowerCase() === goal.teamAbbrev?.toLowerCase(),
+              );
+              if (!scoringTeam) return [];
+              const player = playersById.get(String(goal.playerId));
+              const fullName =
+                goal.name?.default ||
+                `${goal.firstName?.default ?? ""} ${goal.lastName?.default ?? ""}`.trim() ||
+                "Unknown scorer";
+              return [{
+                id: `${game.id}:${goal.eventId}`,
+                gameId: game.id,
+                gameDate: game.gameDate,
+                awayTeam: game.awayTeam,
+                homeTeam: game.homeTeam,
+                scoringTeam,
+                scorer: {
+                  id: String(goal.playerId),
+                  fullName,
+                  jerseyNumber: goal.sweaterNumber ?? player?.jerseyNumber ?? null,
+                  headshotUrl: assetUrl(goal.headshot) ?? player?.headshotUrl ?? null,
+                },
+                periodNumber,
+                periodLabel: periodLabel(periodNumber, period.periodDescriptor?.periodType),
+                timeInPeriod: goal.timeInPeriod ?? "time unavailable",
+                awayScore: goal.awayScore ?? null,
+                homeScore: goal.homeScore ?? null,
+                strength: goal.strength ?? null,
+              }];
+            });
           });
-        });
+        } catch (error) {
+          // Fallback to old NHL API if new API fails
+          try {
+            const oldApiUrl = `https://statsapi.web.nhl.com/api/v1/game/${game.id}/feed/live`;
+            const response = await fetch(oldApiUrl);
+            if (!response.ok) return [];
+            const data: any = await response.json();
+            const scoringPlays = data.liveData?.plays?.scoringPlays || [];
+            const allPlays = data.liveData?.plays?.allPlays || [];
+            
+            return scoringPlays.flatMap((playIndex: number) => {
+              const play = allPlays[playIndex];
+              if (!play || !play.result?.event || play.result.event !== 'Goal') return [];
+              
+              const scorer = play.players?.find((p: any) => p.playerType === 'Scorer');
+              if (!scorer) return [];
+              
+              const scoringTeam = [game.awayTeam, game.homeTeam].find(
+                (team) => team.id === String(play.team?.id),
+              );
+              if (!scoringTeam) return [];
+              
+              const player = playersById.get(String(scorer.player.id));
+              
+              return [{
+                id: `${game.id}:${play.about?.eventId || playIndex}`,
+                gameId: game.id,
+                gameDate: game.gameDate,
+                awayTeam: game.awayTeam,
+                homeTeam: game.homeTeam,
+                scoringTeam,
+                scorer: {
+                  id: String(scorer.player.id),
+                  fullName: scorer.player.fullName || "Unknown",
+                  jerseyNumber: player?.jerseyNumber ?? null,
+                  headshotUrl: player?.headshotUrl ?? null,
+                },
+                periodNumber: play.about?.period || 0,
+                periodLabel: periodLabel(play.about?.period || 0, play.about?.periodType),
+                timeInPeriod: play.about?.periodTime || "time unavailable",
+                awayScore: play.about?.goals?.away ?? null,
+                homeScore: play.about?.goals?.home ?? null,
+                strength: play.result?.strength?.code ?? null,
+              }];
+            });
+          } catch (fallbackError) {
+            console.error(`Failed to fetch live alerts for game ${game.id}:`, fallbackError);
+            return [];
+          }
+        }
       }),
     );
 
