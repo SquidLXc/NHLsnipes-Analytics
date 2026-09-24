@@ -156,46 +156,93 @@ function LiveAlertsPanel() {
   });
   const feed = query.data as LiveAlerts | undefined;
   const alerts = feed?.alerts ?? [];
+  const latestAlert = alerts[alerts.length - 1]; // Most recent goal
+  const [previousAlertId, setPreviousAlertId] = useState<string | null>(null);
+  const [isNewGoal, setIsNewGoal] = useState(false);
+
+  // Detect new goal and trigger pulse animation
+  useEffect(() => {
+    if (latestAlert && latestAlert.id !== previousAlertId) {
+      setIsNewGoal(true);
+      setPreviousAlertId(latestAlert.id);
+      // Remove pulse effect after 3 seconds
+      const timer = setTimeout(() => setIsNewGoal(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [latestAlert, previousAlertId]);
+
   const latestAlerts = alerts.slice(-6).reverse();
   const tickerAlerts = latestAlerts.length > 1 ? [...latestAlerts, ...latestAlerts] : latestAlerts;
   const statusLabel = query.isLoading ? 'CHECKING' : query.isError ? 'OFFLINE' : feed?.state === 'live' ? 'LIVE' : 'WAITING';
 
   return (
-    <section data-testid="panel-live-alerts" className="scanline rounded-xl border border-accent/25 bg-accent/5 p-4 shadow-[0_0_28px_rgba(255,83,207,.06)]">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <p className="font-mono text-[10px] uppercase tracking-[.16em] text-accent">Live goal alerts</p>
-          <p className="mt-1 text-[11px] text-muted-foreground">Confirmed scoring events from NHL game feeds</p>
+    <>
+      {/* Featured Latest Goal Card */}
+      {latestAlert && (
+        <div 
+          className={`rounded-xl border-2 p-4 transition-all duration-300 ${
+            isNewGoal 
+              ? 'border-accent bg-accent/20 shadow-[0_0_30px_rgba(255,83,207,0.6)] animate-pulse' 
+              : 'border-accent/30 bg-accent/10'
+          }`}
+        >
+          <div className="mb-2 flex items-center justify-between">
+            <span className="font-mono text-[9px] uppercase tracking-wider text-accent">
+              {isNewGoal ? '🚨 GOAL JUST SCORED!' : 'Latest Goal'}
+            </span>
+            <span className="font-mono text-[9px] text-muted-foreground">{latestAlert.periodLabel} {latestAlert.timeInPeriod}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <p className="text-lg font-bold text-foreground">#{latestAlert.scorer.jerseyNumber ?? '—'} {latestAlert.scorer.fullName}</p>
+              <p className="mt-1 font-mono text-sm text-primary">{latestAlert.scoringTeam.abbreviation}</p>
+            </div>
+            <div className="text-right">
+              <p className="font-mono text-2xl font-bold text-foreground">
+                {latestAlert.awayTeam.abbreviation} {latestAlert.awayScore ?? '—'} - {latestAlert.homeScore ?? '—'} {latestAlert.homeTeam.abbreviation}
+              </p>
+            </div>
+          </div>
         </div>
-        <span className={`rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-wider ${statusLabel === 'LIVE' ? 'border-primary/30 bg-primary/10 text-primary' : 'border-accent/30 text-accent'}`}>
-          {statusLabel}
-        </span>
-      </div>
-      <div aria-live="polite" className="relative h-[82px] overflow-hidden rounded-lg border border-border/80 bg-background/70 px-3">
-        {query.isError ? (
-          <div className="flex h-full items-center gap-2 text-[11px] text-muted-foreground">
-            <CircleAlert size={14} className="text-destructive" />
-            Live alert feed unavailable. No events were invented.
+      )}
+      
+      {/* Scrolling Alerts Ticker */}
+      <section data-testid="panel-live-alerts" className="scanline rounded-xl border border-accent/25 bg-accent/5 p-4 shadow-[0_0_28px_rgba(255,83,207,.06)]">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[.16em] text-accent">Live goal alerts</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">Confirmed scoring events from NHL game feeds</p>
           </div>
-        ) : tickerAlerts.length ? (
-          <div className={`live-alert-marquee flex flex-col justify-center gap-2 py-2 ${tickerAlerts.length > latestAlerts.length ? 'live-alert-marquee-active' : ''}`}>
-            {tickerAlerts.map((alert, index) => (
-              <div data-testid={`live-alert-${alert.id}`} key={`${alert.id}-${index}`} className="flex min-w-0 items-center gap-2 font-mono text-[10px] uppercase tracking-[.04em]">
-                <span className="shrink-0 text-accent">GOAL</span>
-                <span className="truncate text-foreground">#{alert.scorer.jerseyNumber ?? '—'} {alert.scorer.fullName}</span>
-                <span className="shrink-0 text-primary">{alert.scoringTeam.abbreviation}</span>
-                <span className="shrink-0 text-muted-foreground">{alert.periodLabel} {alert.timeInPeriod}</span>
-                <span className="ml-auto shrink-0 text-foreground">{alert.awayTeam.abbreviation} {alert.awayScore ?? '—'} — {alert.homeScore ?? '—'} {alert.homeTeam.abbreviation}</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="flex h-full items-center text-[11px] text-muted-foreground">
-            {feed?.state === 'live' ? 'Live games are in progress. Waiting for a confirmed goal.' : 'No games live. Confirmed goals will scroll here during play.'}
-          </div>
-        )}
-      </div>
-    </section>
+          <span className={`rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-wider ${statusLabel === 'LIVE' ? 'border-primary/30 bg-primary/10 text-primary' : 'border-accent/30 text-accent'}`}>
+            {statusLabel}
+          </span>
+        </div>
+        <div aria-live="polite" className="relative h-[82px] overflow-hidden rounded-lg border border-border/80 bg-background/70 px-3">
+          {query.isError ? (
+            <div className="flex h-full items-center gap-2 text-[11px] text-muted-foreground">
+              <CircleAlert size={14} className="text-destructive" />
+              Live alert feed unavailable. No events were invented.
+            </div>
+          ) : tickerAlerts.length ? (
+            <div className={`live-alert-marquee flex flex-col justify-center gap-2 py-2 ${tickerAlerts.length > latestAlerts.length ? 'live-alert-marquee-active' : ''}`}>
+              {tickerAlerts.map((alert, index) => (
+                <div data-testid={`live-alert-${alert.id}`} key={`${alert.id}-${index}`} className="flex min-w-0 items-center gap-2 font-mono text-[10px] uppercase tracking-[.04em]">
+                  <span className="shrink-0 text-accent">GOAL</span>
+                  <span className="truncate text-foreground">#{alert.scorer.jerseyNumber ?? '—'} {alert.scorer.fullName}</span>
+                  <span className="shrink-0 text-primary">{alert.scoringTeam.abbreviation}</span>
+                  <span className="shrink-0 text-muted-foreground">{alert.periodLabel} {alert.timeInPeriod}</span>
+                  <span className="ml-auto shrink-0 text-foreground">{alert.awayTeam.abbreviation} {alert.awayScore ?? '—'} — {alert.homeScore ?? '—'} {alert.homeTeam.abbreviation}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex h-full items-center text-[11px] text-muted-foreground">
+              {feed?.state === 'live' ? 'Live games are in progress. Waiting for a confirmed goal.' : 'No games live. Confirmed goals will scroll here during play.'}
+            </div>
+          )}
+        </div>
+      </section>
+    </>
   );
 }
 
