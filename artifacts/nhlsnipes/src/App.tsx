@@ -247,8 +247,8 @@ function HomeWithLiveAlerts() {
           <h1 className="max-w-3xl text-4xl font-extrabold leading-[.95] tracking-[-.065em] text-foreground md:text-6xl">Find the edge.<br /><span className="text-primary">Respect the noise.</span></h1>
           <p className="mt-5 max-w-xl text-sm leading-6 text-muted-foreground">A compact read on tonight&apos;s NHL markets. High-conviction signals stay loud; missing inputs stay visible.</p>
         </div>
-        <div className="hidden lg:flex lg:items-center lg:justify-center lg:px-6">
-          <img src="/nhlsnipes-logo.png" alt="NHLsnipes" className="w-48 h-48 object-contain opacity-90 hover:opacity-100 transition-opacity" />
+        <div className="hidden md:flex md:items-center md:justify-center md:px-4 lg:px-6">
+          <img src="/nhlsnipes-logo.png" alt="NHLsnipes" className="w-40 h-40 md:w-48 md:h-48 object-contain opacity-90 hover:opacity-100 transition-opacity" />
         </div>
         <div className="flex w-full flex-col gap-3 md:max-w-[390px]">
           <LiveAlertsPanel />
