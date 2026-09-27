@@ -17,7 +17,7 @@ import {
   GetTeamResponse,
   GetTeamsResponse,
 } from "@workspace/api-zod";
-import { db, gamesTable, playersTable, teamsTable } from "@workspace/db";
+import { databaseConfigured, db, gamesTable, playersTable, teamsTable } from "@workspace/db";
 import { z } from "zod";
 
 export type ProviderData = {
@@ -917,57 +917,62 @@ class NhlWebApiProvider implements NhlDataProvider {
         this.getFutureGames(),
       ]);
       const games = Array.from(new Map([...currentGames, ...futureGames].map((game) => [game.id, game])).values());
-      await db.insert(teamsTable).values(
-        teams.map((team) => ({
-          id: team.id,
-          name: team.name,
-           city: team.city,
-          abbreviation: team.abbreviation,
-          conference: team.conference,
-          division: team.division,
-           logoUrl: team.logoUrl,
-          primaryColor: team.primaryColor,
-          secondaryColor: team.secondaryColor,
-        })),
-      ).onConflictDoUpdate({
-        target: teamsTable.id,
-          set: { name: teamsTable.name, city: teamsTable.city, abbreviation: teamsTable.abbreviation, conference: teamsTable.conference, division: teamsTable.division, logoUrl: teamsTable.logoUrl, primaryColor: teamsTable.primaryColor, secondaryColor: teamsTable.secondaryColor, updatedAt: new Date() },
-      });
-      if (games.length) {
-        await db.insert(gamesTable).values(
-          games.map((game) => ({
-            id: game.id,
-            gameDate: new Date(game.gameDate),
-            awayTeamId: game.awayTeam.id,
-            homeTeamId: game.homeTeam.id,
-            venue: game.venue,
-            status: game.status,
-            statusDetail: game.statusDetail,
-            rawPayload: game,
+      
+      // Only insert into database if configured
+      if (databaseConfigured) {
+        await db.insert(teamsTable).values(
+          teams.map((team) => ({
+            id: team.id,
+            name: team.name,
+             city: team.city,
+            abbreviation: team.abbreviation,
+            conference: team.conference,
+            division: team.division,
+             logoUrl: team.logoUrl,
+            primaryColor: team.primaryColor,
+            secondaryColor: team.secondaryColor,
           })),
         ).onConflictDoUpdate({
-          target: gamesTable.id,
-          set: { gameDate: gamesTable.gameDate, status: gamesTable.status, statusDetail: gamesTable.statusDetail, venue: gamesTable.venue, rawPayload: gamesTable.rawPayload, updatedAt: new Date() },
+          target: teamsTable.id,
+            set: { name: teamsTable.name, city: teamsTable.city, abbreviation: teamsTable.abbreviation, conference: teamsTable.conference, division: teamsTable.division, logoUrl: teamsTable.logoUrl, primaryColor: teamsTable.primaryColor, secondaryColor: teamsTable.secondaryColor, updatedAt: new Date() },
         });
+        if (games.length) {
+          await db.insert(gamesTable).values(
+            games.map((game) => ({
+              id: game.id,
+              gameDate: new Date(game.gameDate),
+              awayTeamId: game.awayTeam.id,
+              homeTeamId: game.homeTeam.id,
+              venue: game.venue,
+              status: game.status,
+              statusDetail: game.statusDetail,
+              rawPayload: game,
+            })),
+          ).onConflictDoUpdate({
+            target: gamesTable.id,
+            set: { gameDate: gamesTable.gameDate, status: gamesTable.status, statusDetail: gamesTable.statusDetail, venue: gamesTable.venue, rawPayload: gamesTable.rawPayload, updatedAt: new Date() },
+          });
+        }
+        if (players.length) {
+          await db.insert(playersTable).values(
+            players.map((player) => ({
+              id: player.id,
+              teamId: player.team.id,
+              fullName: player.fullName,
+               firstName: player.firstName,
+               lastName: player.lastName,
+              position: player.position,
+              jerseyNumber: player.jerseyNumber,
+              headshotUrl: player.headshotUrl,
+              active: true,
+            })),
+          ).onConflictDoUpdate({
+            target: playersTable.id,
+            set: { teamId: playersTable.teamId, fullName: playersTable.fullName, firstName: playersTable.firstName, lastName: playersTable.lastName, position: playersTable.position, jerseyNumber: playersTable.jerseyNumber, headshotUrl: playersTable.headshotUrl, updatedAt: new Date() },
+          });
+        }
       }
-      if (players.length) {
-        await db.insert(playersTable).values(
-          players.map((player) => ({
-            id: player.id,
-            teamId: player.team.id,
-            fullName: player.fullName,
-             firstName: player.firstName,
-             lastName: player.lastName,
-            position: player.position,
-            jerseyNumber: player.jerseyNumber,
-            headshotUrl: player.headshotUrl,
-            active: true,
-          })),
-        ).onConflictDoUpdate({
-          target: playersTable.id,
-          set: { teamId: playersTable.teamId, fullName: playersTable.fullName, firstName: playersTable.firstName, lastName: playersTable.lastName, position: playersTable.position, jerseyNumber: playersTable.jerseyNumber, headshotUrl: playersTable.headshotUrl, updatedAt: new Date() },
-        });
-      }
+      
       const completedAt = new Date().toISOString();
       Object.assign(syncHealth, { connection: "connected", lastSuccessfulSync: completedAt, teamsImported: teams.length, gamesImported: games.length, playersImported: players.length, playerStatsImported: 0, goalieStatsImported: 0 });
       return { provider: this.name, startedAt, completedAt, teamsImported: teams.length, gamesImported: games.length, playersImported: players.length, playerStatsImported: 0, goalieStatsImported: 0, errors: [] };
