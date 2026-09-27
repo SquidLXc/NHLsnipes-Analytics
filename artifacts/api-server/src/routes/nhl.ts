@@ -5,7 +5,7 @@ import {
   GetPropsQueryParams,
   GetSnipesQueryParams,
 } from "@workspace/api-zod";
-import { getDataHealth, getNhlProvider } from "../providers/nhl";
+import { getNhlProvider } from "../providers/nhl";
 
 const router: IRouter = Router();
 
@@ -196,18 +196,6 @@ router.get("/audit", async (_req, res) => {
 router.get("/model-performance", async (_req, res) => {
   try {
     res.json(await getNhlProvider().getPerformance());
-  } catch (error) {
-    handleProviderError(res, error);
-  }
-});
-
-router.get("/admin/data-health", (_req, res) => {
-  res.json(getDataHealth());
-});
-
-router.post("/admin/sync", async (_req, res) => {
-  try {
-    res.json(await getNhlProvider().sync());
   } catch (error) {
     handleProviderError(res, error);
   }

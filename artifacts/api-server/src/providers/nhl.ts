@@ -120,7 +120,7 @@ type RawGoal = {
   firstName?: { default?: string };
   lastName?: { default?: string };
   name?: { default?: string };
-  teamAbbrev?: string;
+  teamAbbrev?: string | { default?: string };
   sweaterNumber?: number;
   headshot?: string;
   timeInPeriod?: string;

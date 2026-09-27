@@ -169,6 +169,7 @@ function LiveAlertsPanel() {
       const timer = setTimeout(() => setIsNewGoal(false), 3000);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [latestAlert, previousAlertId]);
 
   const latestAlerts = alerts.slice(-6).reverse();
