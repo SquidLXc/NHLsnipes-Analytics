@@ -849,7 +849,10 @@ class NhlWebApiProvider implements NhlDataProvider {
   }
 
   async getOdds() {
-    if (!ODDSPAPI_API_KEY) return GetOddsResponse.parse({ provider: "OddsPapi", configured: false, lastUpdated: null, games: [] });
+    if (!ODDSPAPI_API_KEY) {
+      console.warn("ODDSPAPI_API_KEY not configured, returning unconfigured odds response");
+      return GetOddsResponse.parse({ provider: "OddsPapi", configured: false, lastUpdated: null, games: [] });
+    }
     if (oddsCache && oddsCache.expiresAt > Date.now()) return oddsCache.data;
 
     try {
@@ -892,6 +895,7 @@ class NhlWebApiProvider implements NhlDataProvider {
       return data;
     } catch (error) {
       console.error("OddsPapi odds fetch error:", error);
+      // Return gracefully degraded response instead of throwing
       return GetOddsResponse.parse({
         provider: "OddsPapi",
         configured: true,
