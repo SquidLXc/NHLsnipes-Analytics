@@ -43,6 +43,21 @@ router.get("/games/today", async (req, res) => {
   }
 });
 
+router.get("/games/future", async (req, res) => {
+  try {
+    const provider = getNhlProvider();
+    const games = await provider.getFutureGames();
+    res.json(games);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Future games request failed";
+    res.status(503).json({
+      error: "Future games unavailable",
+      code: "FUTURE_GAMES_UNAVAILABLE",
+      message,
+    });
+  }
+});
+
 router.get("/games/:gameId", async (req, res) => {
   try {
     const provider = getNhlProvider();
@@ -54,21 +69,6 @@ router.get("/games/:gameId", async (req, res) => {
     res.status(503).json({
       error: "Game detail unavailable",
       code: "GAME_DETAIL_UNAVAILABLE",
-      message,
-    });
-  }
-});
-
-router.get("/games/future", async (req, res) => {
-  try {
-    const provider = getNhlProvider();
-    const games = await provider.getFutureGames();
-    res.json(games);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Future games request failed";
-    res.status(503).json({
-      error: "Future games unavailable",
-      code: "FUTURE_GAMES_UNAVAILABLE",
       message,
     });
   }

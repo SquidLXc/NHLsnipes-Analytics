@@ -449,17 +449,22 @@ class NhlWebApiProvider implements NhlDataProvider {
   }
 
   async getFutureGames() {
-    const today = dateOnly(new Date());
-    const firstDate = INCLUDE_PRESEASON
-      ? addDays(today, 1)
-      : today >= NHL_SEASON_START_DATE
+    try {
+      const today = dateOnly(new Date());
+      const firstDate = INCLUDE_PRESEASON
         ? addDays(today, 1)
-        : NHL_SEASON_START_DATE;
-    for (let offset = 0; offset < 14; offset += 1) {
-      const games = await this.getGames(addDays(firstDate, offset));
-      if (games.length) return games;
+        : today >= NHL_SEASON_START_DATE
+          ? addDays(today, 1)
+          : NHL_SEASON_START_DATE;
+      for (let offset = 0; offset < 14; offset += 1) {
+        const games = await this.getGames(addDays(firstDate, offset));
+        if (games.length) return games;
+      }
+      return GetGamesResponse.parse([]);
+    } catch (error) {
+      console.error("getFutureGames error:", error);
+      return GetGamesResponse.parse([]);
     }
-    return GetGamesResponse.parse([]);
   }
 
   async getLiveAlerts() {
@@ -712,30 +717,31 @@ class NhlWebApiProvider implements NhlDataProvider {
   }
 
   async getProps() {
-    const [games, players, playerPropsOdds] = await Promise.all([
-      this.getGames(),
-      this.getPlayers(),
-      this.getPlayerPropsOdds(),
-    ]);
+    try {
+      const [games, players, playerPropsOdds] = await Promise.all([
+        this.getGames(),
+        this.getPlayers(),
+        this.getPlayerPropsOdds(),
+      ]);
 
-    if (!games.length || !players.length) {
-      return GetPropsResponse.parse([]);
-    }
+      if (!games.length || !players.length) {
+        return GetPropsResponse.parse([]);
+      }
 
-    // Build opponent map
-    const opponentByTeam = new Map<string, ReturnType<typeof teamFromRaw>>();
-    games.forEach((game) => {
-      opponentByTeam.set(game.homeTeam.id, game.awayTeam);
-      opponentByTeam.set(game.awayTeam.id, game.homeTeam);
-    });
+      // Build opponent map
+      const opponentByTeam = new Map<string, ReturnType<typeof teamFromRaw>>();
+      games.forEach((game) => {
+        opponentByTeam.set(game.homeTeam.id, game.awayTeam);
+        opponentByTeam.set(game.awayTeam.id, game.homeTeam);
+      });
 
-    // Calculate predictions for each player
-    const props = await Promise.all(
-      players.map(async (player) => {
-        const opponent = opponentByTeam.get(player.team.id);
-        if (!opponent) return null;
+      // Calculate predictions for each player
+      const props = await Promise.all(
+        players.map(async (player) => {
+          const opponent = opponentByTeam.get(player.team.id);
+          if (!opponent) return null;
 
-        // Get detailed player stats
+          // Get detailed player stats
         let detailedPlayer;
         try {
           detailedPlayer = await this.getPlayer(player.id);
@@ -831,6 +837,10 @@ class NhlWebApiProvider implements NhlDataProvider {
     validProps.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
 
     return GetPropsResponse.parse(validProps);
+    } catch (error) {
+      console.error("getProps error:", error);
+      return GetPropsResponse.parse([]);
+    }
   }
 
   async getPropsByMarket() {
