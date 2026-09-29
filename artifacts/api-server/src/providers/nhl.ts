@@ -370,10 +370,13 @@ class NhlWebApiProvider implements NhlDataProvider {
 
   private async getOddsPapiFixtures(): Promise<OddsPapiFixture[]> {
     try {
-      const fixtures = await this.fetchOddsPapiJson<{ fixtures?: OddsPapiFixture[] }>(
+      const fixtures = await this.fetchOddsPapiJson<any>(
         `fixtures?sportId=15&tournamentId=234`
       );
-      return fixtures.fixtures || [];
+      console.log(`OddsPapi fixtures response:`, JSON.stringify(fixtures).substring(0, 500));
+      // Handle different response structures
+      const fixturesArray = fixtures.fixtures || fixtures.data || fixtures;
+      return Array.isArray(fixturesArray) ? fixturesArray : [];
     } catch (error) {
       console.error("Failed to fetch OddsPapi fixtures:", error);
       return [];
@@ -394,9 +397,11 @@ class NhlWebApiProvider implements NhlDataProvider {
 
   private async getOddsPapiOdds(fixtureId: number): Promise<OddsPapiOddsResponse | null> {
     try {
-      return await this.fetchOddsPapiJson<OddsPapiOddsResponse>(
+      const result = await this.fetchOddsPapiJson<any>(
         `odds?fixtureId=${fixtureId}`
       );
+      console.log(`OddsPapi odds response for fixture ${fixtureId}:`, JSON.stringify(result).substring(0, 500));
+      return result;
     } catch (error) {
       console.error(`Failed to fetch OddsPapi odds for fixture ${fixtureId}:`, error);
       return null;
@@ -753,8 +758,8 @@ class NhlWebApiProvider implements NhlDataProvider {
           const seasonGoalsPerGame = seasonStats.goals / seasonGames;
           const seasonShotsPerGame = seasonStats.sog / seasonGames;
 
-          // Simplified probability calculation to avoid model timeouts
-        const overProbability = Math.min(0.5 + (seasonGoalsPerGame * 0.1), 0.8);
+          // Calculate probability based on player performance
+        const overProbability = Math.min(0.8, Math.max(0.2, seasonGoalsPerGame * 2));
         const underProbability = 1 - overProbability;
         const modelProjection = seasonGoalsPerGame;
 
@@ -771,7 +776,7 @@ class NhlWebApiProvider implements NhlDataProvider {
         const odds = matchingProp?.odds ?? null;
         const line = matchingProp?.line ?? null;
 
-        // Calculate edge if we have odds, otherwise set a small default edge for testing
+        // Calculate edge only if we have real odds from OddsPapi
         let edge = null;
         if (odds !== null) {
           // Convert American odds to implied probability
@@ -780,10 +785,8 @@ class NhlWebApiProvider implements NhlDataProvider {
             : Math.abs(odds) / (Math.abs(odds) + 100);
           
           edge = overProbability - impliedProb;
-        } else {
-          // Set a small default edge for testing when no odds available
-          edge = 0.05; // 5% default edge
         }
+        // No edge without real odds - this ensures we only show real betting opportunities
 
         const { confidenceFromEdge } = await import("../models/confidence");
         const confidence = confidenceFromEdge(edge, seasonGames);
@@ -923,22 +926,36 @@ class NhlWebApiProvider implements NhlDataProvider {
         line?: number;
       }> = [];
 
+      console.log(`Processing ${games.length} games, ${oddsPapiFixtures.length} OddsPapi fixtures, ${playerPropMarkets.length} player prop markets`);
+
       for (const game of games) {
         const away = canonicalTeamName(game.awayTeam.name);
         const home = canonicalTeamName(game.homeTeam.name);
 
-        // Find matching OddsPapi fixture
+        console.log(`Looking for fixture: ${away} @ ${home}`);
+
+        // Find matching OddsPapi fixture (try multiple matching strategies)
         const fixture = oddsPapiFixtures.find(
           (f) =>
             canonicalTeamName(f.awayTeam) === away &&
             canonicalTeamName(f.homeTeam) === home
         );
 
-        if (!fixture) continue;
+        if (!fixture) {
+          console.log(`No fixture found for ${away} @ ${home}`);
+          continue;
+        }
+
+        console.log(`Found fixture ${fixture.id}, fetching odds...`);
 
         // Fetch odds for this fixture
         const oddsData = await this.getOddsPapiOdds(fixture.id);
-        if (!oddsData) continue;
+        if (!oddsData) {
+          console.log(`No odds data for fixture ${fixture.id}`);
+          continue;
+        }
+
+        console.log(`Odds data has ${oddsData.markets?.length || 0} markets`);
 
         // Extract player props from markets
         for (const market of oddsData.markets) {
@@ -946,23 +963,24 @@ class NhlWebApiProvider implements NhlDataProvider {
           const isPlayerProp = playerPropMarkets.some(pm => pm.id === market.id);
           if (!isPlayerProp) continue;
 
-          for (const selection of market.selections) {
-            if (!selection.player || !selection.prices.length) continue;
+          console.log(`Processing player prop market: ${market.name}`);
 
-            // Get the best price for this selection
-            const bestPrice = selection.prices[0]; // Use first available sportsbook
-
-            playerProps.push({
-              playerName: selection.player.name,
-              market: market.name,
-              odds: bestPrice.americanOdds,
-              bookmaker: bestPrice.sportsbookName,
-              line: bestPrice.line,
-            });
+          // Extract player selections with odds
+          for (const selection of market.selections || []) {
+            if (selection.player && selection.price) {
+              playerProps.push({
+                playerName: selection.player.name,
+                market: market.name,
+                odds: selection.price,
+                bookmaker: market.bookmaker || selection.bookmaker || "OddsPapi",
+                line: selection.line,
+              });
+            }
           }
         }
       }
 
+      console.log(`Extracted ${playerProps.length} player props from OddsPapi`);
       return playerProps;
     } catch (error) {
       console.error("Error fetching player props from OddsPapi:", error);
