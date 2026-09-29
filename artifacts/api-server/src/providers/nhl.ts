@@ -238,6 +238,7 @@ const teamCache = new Map<string, ProviderData["teams"][number]>();
 let playersCache: ProviderData["players"] | null = null;
 let playersCacheAt = 0;
 let oddsCache: { expiresAt: number; data: ProviderData["odds"] } | null = null;
+let tournamentsCache: { expiresAt: number; data: any } | null = null;
 
 function text(value: string | undefined, fallback: string) {
   return value?.trim() || fallback;
@@ -382,11 +383,19 @@ class NhlWebApiProvider implements NhlDataProvider {
       console.log("API Key configured:", !!ODDSPAPI_API_KEY);
       console.log("API Key:", ODDSPAPI_API_KEY ? ODDSPAPI_API_KEY.substring(0, 8) + "..." : "none");
       
-      // First get tournaments for sportId 15 (hockey)
-      console.log("Fetching tournaments for sportId 15...");
-      const tournaments = await this.fetchOddsPapiJson<any>(
-        `tournaments?sportId=15`
-      );
+      // First get tournaments for sportId 15 (hockey) with caching
+      let tournaments;
+      if (tournamentsCache && tournamentsCache.expiresAt > Date.now()) {
+        console.log("Using cached tournaments");
+        tournaments = tournamentsCache.data;
+      } else {
+        console.log("Fetching tournaments for sportId 15...");
+        tournaments = await this.fetchOddsPapiJson<any>(
+          `tournaments?sportId=15`
+        );
+        tournamentsCache = { expiresAt: Date.now() + 300_000, data: tournaments }; // 5 min cache
+      }
+      
       console.log(`OddsPapi tournaments response type:`, typeof tournaments);
       console.log(`OddsPapi tournaments is array:`, Array.isArray(tournaments));
       console.log(`OddsPapi tournaments length:`, Array.isArray(tournaments) ? tournaments.length : 'N/A');
@@ -406,15 +415,50 @@ class NhlWebApiProvider implements NhlDataProvider {
       
       console.log(`Found NHL tournament: ${nhlTournament.tournamentName} (ID: ${nhlTournament.tournamentId})`);
       
-      // Now get fixtures/odds for the NHL tournament using odds-by-tournaments
-      console.log(`Fetching odds-by-tournaments for tournament ID: ${nhlTournament.tournamentId}...`);
-      const oddsData = await this.fetchOddsPapiJson<any>(
-        `odds-by-tournaments?tournamentIds=${nhlTournament.tournamentId}&oddsFormat=american`
-      );
-      console.log(`OddsPapi odds-by-tournaments response type:`, typeof oddsData);
-      console.log(`OddsPapi odds-by-tournaments is array:`, Array.isArray(oddsData));
-      console.log(`OddsPapi odds-by-tournaments length:`, Array.isArray(oddsData) ? oddsData.length : 'N/A');
-      console.log(`OddsPapi odds-by-tournaments response:`, JSON.stringify(oddsData).substring(0, 800));
+      // Try different approaches to get odds
+      let oddsData;
+      
+      // First try odds-by-tournaments without oddsFormat parameter
+      try {
+        console.log(`Fetching odds-by-tournaments for tournament ID: ${nhlTournament.tournamentId}...`);
+        oddsData = await this.fetchOddsPapiJson<any>(
+          `odds-by-tournaments?tournamentIds=${nhlTournament.tournamentId}`
+        );
+        console.log(`OddsPapi odds-by-tournaments response type:`, typeof oddsData);
+        console.log(`OddsPapi odds-by-tournaments is array:`, Array.isArray(oddsData));
+        console.log(`OddsPapi odds-by-tournaments length:`, Array.isArray(oddsData) ? oddsData.length : 'N/A');
+        console.log(`OddsPapi odds-by-tournaments response:`, JSON.stringify(oddsData).substring(0, 800));
+      } catch (error) {
+        console.log(`odds-by-tournaments failed, trying fixtures endpoint instead...`);
+        
+        // Fall back to fixtures endpoint
+        const fixtures = await this.fetchOddsPapiJson<any>(
+          `fixtures?sportId=15&tournamentId=${nhlTournament.tournamentId}`
+        );
+        console.log(`OddsPapi fixtures response:`, JSON.stringify(fixtures).substring(0, 800));
+        
+        // Try to get odds for each fixture (reduced to 2 to avoid rate limiting)
+        if (Array.isArray(fixtures) && fixtures.length > 0) {
+          console.log(`Trying to get odds for ${Math.min(2, fixtures.length)} fixtures (rate limit protection)...`);
+          const fixturesWithOdds = await Promise.all(
+            fixtures.slice(0, 2).map(async (fixture: any) => {
+              try {
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Rate limit protection
+                const fixtureOdds = await this.fetchOddsPapiJson<any>(
+                  `odds?fixtureId=${fixture.id}`
+                );
+                return { ...fixture, odds: fixtureOdds };
+              } catch (error) {
+                console.log(`Failed to get odds for fixture ${fixture.id}`);
+                return { ...fixture, odds: null };
+              }
+            })
+          );
+          return fixturesWithOdds;
+        }
+        
+        return [];
+      }
       
       // Return the fixtures from the odds response
       return Array.isArray(oddsData) ? oddsData : [];
@@ -966,18 +1010,21 @@ class NhlWebApiProvider implements NhlDataProvider {
       }> = [];
 
       for (const fixture of oddsPapiFixtures) {
-        console.log(`Processing fixture ${fixture.fixtureId}`);
-        console.log(`Fixture has bookmakerOdds:`, !!fixture.bookmakerOdds);
+        console.log(`Processing fixture ${fixture.fixtureId || fixture.id}`);
         
-        if (!fixture.bookmakerOdds) {
-          console.log(`No bookmakerOdds for fixture ${fixture.fixtureId}`);
+        // Handle both bookmakerOdds structure and odds property from fallback
+        const bookmakerOdds = fixture.bookmakerOdds || (fixture.odds?.bookmakerOdds);
+        console.log(`Fixture has bookmakerOdds:`, !!bookmakerOdds);
+        
+        if (!bookmakerOdds) {
+          console.log(`No bookmakerOdds for fixture ${fixture.fixtureId || fixture.id}`);
           continue;
         }
 
-        console.log(`Bookmakers for fixture ${fixture.fixtureId}:`, Object.keys(fixture.bookmakerOdds).join(', '));
+        console.log(`Bookmakers for fixture ${fixture.fixtureId || fixture.id}:`, Object.keys(bookmakerOdds).join(', '));
 
         // Extract player props from the fixture's bookmakerOdds
-        for (const [bookmakerName, bookmakerData] of Object.entries(fixture.bookmakerOdds)) {
+        for (const [bookmakerName, bookmakerData] of Object.entries(bookmakerOdds)) {
           const bookmaker = bookmakerData as any;
           if (!bookmaker.markets) {
             console.log(`No markets for bookmaker ${bookmakerName}`);
