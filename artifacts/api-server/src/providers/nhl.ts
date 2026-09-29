@@ -378,11 +378,19 @@ class NhlWebApiProvider implements NhlDataProvider {
 
   private async getOddsPapiFixtures(): Promise<OddsPapiFixture[]> {
     try {
+      console.log("=== OddsPapi Integration Debug ===");
+      console.log("API Key configured:", !!ODDSPAPI_API_KEY);
+      console.log("API Key:", ODDSPAPI_API_KEY ? ODDSPAPI_API_KEY.substring(0, 8) + "..." : "none");
+      
       // First get tournaments for sportId 15 (hockey)
+      console.log("Fetching tournaments for sportId 15...");
       const tournaments = await this.fetchOddsPapiJson<any>(
         `tournaments?sportId=15`
       );
-      console.log(`OddsPapi tournaments response:`, JSON.stringify(tournaments).substring(0, 500));
+      console.log(`OddsPapi tournaments response type:`, typeof tournaments);
+      console.log(`OddsPapi tournaments is array:`, Array.isArray(tournaments));
+      console.log(`OddsPapi tournaments length:`, Array.isArray(tournaments) ? tournaments.length : 'N/A');
+      console.log(`OddsPapi tournaments response:`, JSON.stringify(tournaments).substring(0, 800));
       
       // Find NHL tournament (look for common NHL tournament names)
       const nhlTournament = Array.isArray(tournaments) ? tournaments.find((t: any) => 
@@ -392,21 +400,27 @@ class NhlWebApiProvider implements NhlDataProvider {
       
       if (!nhlTournament) {
         console.log('No NHL tournament found in OddsPapi tournaments');
+        console.log('Available tournaments:', Array.isArray(tournaments) ? tournaments.map((t: any) => t.tournamentName).join(', ') : 'none');
         return [];
       }
       
       console.log(`Found NHL tournament: ${nhlTournament.tournamentName} (ID: ${nhlTournament.tournamentId})`);
       
       // Now get fixtures/odds for the NHL tournament using odds-by-tournaments
+      console.log(`Fetching odds-by-tournaments for tournament ID: ${nhlTournament.tournamentId}...`);
       const oddsData = await this.fetchOddsPapiJson<any>(
         `odds-by-tournaments?tournamentIds=${nhlTournament.tournamentId}&oddsFormat=american`
       );
-      console.log(`OddsPapi odds-by-tournaments response:`, JSON.stringify(oddsData).substring(0, 500));
+      console.log(`OddsPapi odds-by-tournaments response type:`, typeof oddsData);
+      console.log(`OddsPapi odds-by-tournaments is array:`, Array.isArray(oddsData));
+      console.log(`OddsPapi odds-by-tournaments length:`, Array.isArray(oddsData) ? oddsData.length : 'N/A');
+      console.log(`OddsPapi odds-by-tournaments response:`, JSON.stringify(oddsData).substring(0, 800));
       
       // Return the fixtures from the odds response
       return Array.isArray(oddsData) ? oddsData : [];
     } catch (error) {
       console.error("Failed to fetch OddsPapi fixtures:", error);
+      console.error("Error details:", error instanceof Error ? error.message : String(error));
       return [];
     }
   }
@@ -777,9 +791,10 @@ class NhlWebApiProvider implements NhlDataProvider {
           const seasonShotsPerGame = seasonStats.sog / seasonGames;
 
           // Calculate probability based on player performance - make it more realistic
-        const baseProbability = seasonGoalsPerGame * 0.8; // Base probability based on goals per game
-        const positionBonus = player.position === 'C' ? 0.05 : player.position === 'W' ? 0.03 : 0; // Bonus for offensive positions
-        const overProbability = Math.min(0.75, Math.max(0.05, baseProbability + positionBonus));
+        const baseProbability = Math.min(0.6, seasonGoalsPerGame * 1.2); // Base probability based on goals per game
+        const positionBonus = player.position === 'C' ? 0.08 : player.position === 'W' ? 0.05 : player.position === 'D' ? 0.02 : 0; // Bonus for offensive positions
+        const minProbability = 0.15; // Minimum probability for any player
+        const overProbability = Math.min(0.8, Math.max(minProbability, baseProbability + positionBonus));
         const underProbability = 1 - overProbability;
         const modelProjection = seasonGoalsPerGame;
 
@@ -930,9 +945,14 @@ class NhlWebApiProvider implements NhlDataProvider {
     if (!ODDSPAPI_API_KEY) return [];
 
     try {
+      console.log("=== getPlayerPropsOdds Debug ===");
+      
       // Get OddsPapi fixtures (which now includes odds data)
       const oddsPapiFixtures = await this.getOddsPapiFixtures();
-      if (!oddsPapiFixtures.length) return [];
+      if (!oddsPapiFixtures.length) {
+        console.log("No OddsPapi fixtures returned");
+        return [];
+      }
 
       console.log(`Processing ${oddsPapiFixtures.length} OddsPapi fixtures with odds`);
 
@@ -946,36 +966,58 @@ class NhlWebApiProvider implements NhlDataProvider {
       }> = [];
 
       for (const fixture of oddsPapiFixtures) {
-        console.log(`Processing fixture ${fixture.fixtureId}, extracting player props...`);
+        console.log(`Processing fixture ${fixture.fixtureId}`);
+        console.log(`Fixture has bookmakerOdds:`, !!fixture.bookmakerOdds);
+        
+        if (!fixture.bookmakerOdds) {
+          console.log(`No bookmakerOdds for fixture ${fixture.fixtureId}`);
+          continue;
+        }
+
+        console.log(`Bookmakers for fixture ${fixture.fixtureId}:`, Object.keys(fixture.bookmakerOdds).join(', '));
 
         // Extract player props from the fixture's bookmakerOdds
-        if (fixture.bookmakerOdds) {
-          for (const [bookmakerName, bookmakerData] of Object.entries(fixture.bookmakerOdds)) {
-            const bookmaker = bookmakerData as any;
-            if (!bookmaker.markets) continue;
+        for (const [bookmakerName, bookmakerData] of Object.entries(fixture.bookmakerOdds)) {
+          const bookmaker = bookmakerData as any;
+          if (!bookmaker.markets) {
+            console.log(`No markets for bookmaker ${bookmakerName}`);
+            continue;
+          }
 
-            console.log(`Processing bookmaker ${bookmakerName} with ${Object.keys(bookmaker.markets).length} markets`);
+          console.log(`Processing bookmaker ${bookmakerName} with ${Object.keys(bookmaker.markets).length} markets`);
 
-            for (const [marketId, marketData] of Object.entries(bookmaker.markets)) {
-              const market = marketData as any;
-              if (!market.outcomes) continue;
+          for (const [marketId, marketData] of Object.entries(bookmaker.markets)) {
+            const market = marketData as any;
+            if (!market.outcomes) {
+              console.log(`No outcomes for market ${marketId}`);
+              continue;
+            }
 
-              // Look for player props (markets with playerName in outcomes)
-              for (const [outcomeId, outcomeData] of Object.entries(market.outcomes)) {
-                const outcome = outcomeData as any;
-                if (!outcome.players) continue;
+            console.log(`Market ${marketId} has ${Object.keys(market.outcomes).length} outcomes`);
 
-                for (const [playerId, playerData] of Object.entries(outcome.players)) {
-                  const player = playerData as any;
-                  if (player.playerName && player.price) {
-                    playerProps.push({
-                      playerName: player.playerName,
-                      market: marketId, // Using marketId as market name for now
-                      odds: player.price,
-                      bookmaker: bookmakerName,
-                      line: player.line,
-                    });
-                  }
+            // Look for player props (markets with playerName in outcomes)
+            for (const [outcomeId, outcomeData] of Object.entries(market.outcomes)) {
+              const outcome = outcomeData as any;
+              if (!outcome.players) {
+                console.log(`No players for outcome ${outcomeId}`);
+                continue;
+              }
+
+              console.log(`Outcome ${outcomeId} has ${Object.keys(outcome.players).length} players`);
+
+              for (const [playerId, playerData] of Object.entries(outcome.players)) {
+                const player = playerData as any;
+                console.log(`Player data:`, JSON.stringify(player).substring(0, 200));
+                
+                if (player.playerName && player.price) {
+                  playerProps.push({
+                    playerName: player.playerName,
+                    market: marketId, // Using marketId as market name for now
+                    odds: player.price,
+                    bookmaker: bookmakerName,
+                    line: player.line,
+                  });
+                  console.log(`Added player prop: ${player.playerName} at ${player.price}`);
                 }
               }
             }
@@ -983,10 +1025,11 @@ class NhlWebApiProvider implements NhlDataProvider {
         }
       }
 
-      console.log(`Extracted ${playerProps.length} player props from OddsPapi`);
+      console.log(`=== Final count: Extracted ${playerProps.length} player props from OddsPapi ===`);
       return playerProps;
     } catch (error) {
       console.error("Error fetching player props from OddsPapi:", error);
+      console.error("Error details:", error instanceof Error ? error.message : String(error));
       return [];
     }
   }
