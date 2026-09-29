@@ -165,6 +165,51 @@ type RawPlayer = {
 };
 type NormalizedTeam = z.infer<typeof GetTeamsResponse>[number];
 
+// OddsPapi types
+type OddsPapiFixture = {
+  id: number;
+  tournamentId: number;
+  sportId: number;
+  homeTeam: string;
+  awayTeam: string;
+  startTime: string;
+  status: string;
+};
+
+type OddsPapiMarket = {
+  id: number;
+  name: string;
+  playerProp: boolean;
+};
+
+type OddsPapiSelection = {
+  id: number;
+  name: string;
+  player?: {
+    id: number;
+    name: string;
+  };
+  status: string;
+  prices: Array<{
+    sportsbookId: number;
+    sportsbookName: string;
+    americanOdds: number;
+    decimalOdds: number;
+    line?: number;
+  }>;
+};
+
+type OddsPapiOddsResponse = {
+  fixtureId: number;
+  tournamentId: number;
+  sportId: number;
+  markets: Array<{
+    id: number;
+    name: string;
+    selections: OddsPapiSelection[];
+  }>;
+};
+
 const NHL_API_BASE_URL =
   process.env.NHLSNIPES_NHL_API_BASE_URL?.replace(/\/$/, "") ||
   "https://api-web.nhle.com/v1";
@@ -174,6 +219,8 @@ const NHL_SEASON_START_DATE =
   process.env.NHLSNIPES_SEASON_START_DATE || "2026-09-29";
 const INCLUDE_PRESEASON =
   process.env.NHLSNIPES_INCLUDE_PRESEASON !== "false";
+const ODDSPAPI_API_KEY = process.env.ODDSPAPI_API_KEY;
+const ODDSPAPI_BASE_URL = "https://api.oddspapi.io/v4";
 const syncHealth: DataHealth = {
   provider: "NHL Web API",
   connection: "connected",
@@ -297,10 +344,63 @@ class NhlWebApiProvider implements NhlDataProvider {
     return (await response.json()) as T;
   }
 
+  private async fetchOddsPapiJson<T>(path: string): Promise<T> {
+    if (!ODDSPAPI_API_KEY) throw new Error("OddsPapi API key not configured");
+    const url = new URL(`${ODDSPAPI_BASE_URL}/${path.replace(/^\//, "")}`);
+    url.searchParams.set("apiKey", ODDSPAPI_API_KEY);
+    const response = await fetch(url, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("OddsPapi authentication failed - check API key");
+    }
+    if (response.status === 429) {
+      throw new Error("OddsPapi rate limit exceeded");
+    }
+    if (!response.ok) throw new Error(`OddsPapi returned HTTP ${response.status} for ${path}`);
+    return (await response.json()) as T;
+  }
+
   private async loadTeams() {
     const raw = await this.fetchJson<{ standings?: RawTeam[] }>("standings/now");
     for (const standing of raw.standings ?? []) teamFromRaw(standing);
     return Array.from(new Map(Array.from(teamCache.values()).map((team) => [team.id, team])).values());
+  }
+
+  private async getOddsPapiFixtures(): Promise<OddsPapiFixture[]> {
+    try {
+      const fixtures = await this.fetchOddsPapiJson<{ fixtures?: OddsPapiFixture[] }>(
+        `fixtures?sportId=15&tournamentId=234`
+      );
+      return fixtures.fixtures || [];
+    } catch (error) {
+      console.error("Failed to fetch OddsPapi fixtures:", error);
+      return [];
+    }
+  }
+
+  private async getOddsPapiMarkets(): Promise<OddsPapiMarket[]> {
+    try {
+      const markets = await this.fetchOddsPapiJson<{ markets?: OddsPapiMarket[] }>(
+        `markets?sportId=15`
+      );
+      return (markets.markets || []).filter(m => m.playerProp);
+    } catch (error) {
+      console.error("Failed to fetch OddsPapi markets:", error);
+      return [];
+    }
+  }
+
+  private async getOddsPapiOdds(fixtureId: number): Promise<OddsPapiOddsResponse | null> {
+    try {
+      return await this.fetchOddsPapiJson<OddsPapiOddsResponse>(
+        `odds?fixtureId=${fixtureId}`
+      );
+    } catch (error) {
+      console.error(`Failed to fetch OddsPapi odds for fixture ${fixtureId}:`, error);
+      return null;
+    }
   }
 
   private async loadPlayers() {
@@ -749,128 +849,128 @@ class NhlWebApiProvider implements NhlDataProvider {
   }
 
   async getOdds() {
-    const apiKey = process.env.ODDS_API_KEY;
-    if (!apiKey) return GetOddsResponse.parse({ provider: "The Odds API", configured: false, lastUpdated: null, games: [] });
+    if (!ODDSPAPI_API_KEY) return GetOddsResponse.parse({ provider: "OddsPapi", configured: false, lastUpdated: null, games: [] });
     if (oddsCache && oddsCache.expiresAt > Date.now()) return oddsCache.data;
 
-    const url = new URL("https://api.the-odds-api.com/v4/sports/icehockey_nhl/odds");
-    url.searchParams.set("apiKey", apiKey);
-    url.searchParams.set("regions", "us");
-    url.searchParams.set("markets", "h2h,spreads,totals");
-    url.searchParams.set("oddsFormat", "american");
-    const response = await fetch(url, { headers: { accept: "application/json" } });
-    if (!response.ok) throw new Error(`Odds provider returned HTTP ${response.status}`);
-    const rawEvents = (await response.json()) as RawOddsEvent[];
-    const [currentGames, futureGames] = await Promise.all([this.getGames(), this.getFutureGames()]);
-    const verifiedGames = [...currentGames, ...futureGames];
-    const games = rawEvents.flatMap((event) => {
-      const away = canonicalTeamName(event.away_team || "");
-      const home = canonicalTeamName(event.home_team || "");
-      const game = verifiedGames.find((candidate) => canonicalTeamName(candidate.awayTeam.name) === away && canonicalTeamName(candidate.homeTeam.name) === home);
-      if (!game) return [];
-      const sportsbooks = (event.bookmakers || []).flatMap((bookmaker) => {
-        const markets = (bookmaker.markets || []).flatMap((market) => {
-          if (!market.key || !market.outcomes?.length) return [];
-          return [{
-            key: market.key,
-            label: market.key === "h2h" ? "Moneyline" : market.key === "spreads" ? "Puck line" : "Total",
-            outcomes: market.outcomes.filter((outcome) => outcome.name && typeof outcome.price === "number").map((outcome) => ({
-              name: outcome.name!,
-              price: outcome.price!,
-              point: outcome.point ?? null,
-            })),
-          }];
-        });
-        if (!bookmaker.key || !bookmaker.title || !markets.length) return [];
-        return [{ key: bookmaker.key, title: bookmaker.title, lastUpdate: bookmaker.last_update ?? null, markets }];
+    try {
+      const [oddsPapiFixtures, currentGames, futureGames] = await Promise.all([
+        this.getOddsPapiFixtures(),
+        this.getGames(),
+        this.getFutureGames(),
+      ]);
+      const verifiedGames = [...currentGames, ...futureGames];
+
+      // Match OddsPapi fixtures to NHL games by team names
+      const games = oddsPapiFixtures.flatMap((fixture) => {
+        const away = canonicalTeamName(fixture.awayTeam);
+        const home = canonicalTeamName(fixture.homeTeam);
+        const game = verifiedGames.find((candidate) =>
+          canonicalTeamName(candidate.awayTeam.name) === away &&
+          canonicalTeamName(candidate.homeTeam.name) === home
+        );
+        if (!game) return [];
+
+        // Return basic game odds structure (OddsPapi focuses on player props)
+        return [{
+          game,
+          sportsbooks: [{
+            key: "oddspapi",
+            title: "OddsPapi",
+            lastUpdate: new Date().toISOString(),
+            markets: []
+          }]
+        }];
       });
-      return sportsbooks.length ? [{ game, sportsbooks }] : [];
-    });
-    const data = GetOddsResponse.parse({ provider: "The Odds API", configured: true, lastUpdated: new Date().toISOString(), games });
-    oddsCache = { expiresAt: Date.now() + 60_000, data };
-    return data;
+
+      const data = GetOddsResponse.parse({
+        provider: "OddsPapi",
+        configured: true,
+        lastUpdated: new Date().toISOString(),
+        games
+      });
+      oddsCache = { expiresAt: Date.now() + 60_000, data };
+      return data;
+    } catch (error) {
+      console.error("OddsPapi odds fetch error:", error);
+      return GetOddsResponse.parse({
+        provider: "OddsPapi",
+        configured: true,
+        lastUpdated: null,
+        games: []
+      });
+    }
   }
 
   async getPlayerPropsOdds() {
-    const apiKey = process.env.ODDS_API_KEY;
-    if (!apiKey) return [];
+    if (!ODDSPAPI_API_KEY) return [];
 
-    // Get today's games to fetch player props for
-    const games = await this.getGames();
-    if (!games.length) return [];
+    try {
+      // Get today's games to fetch player props for
+      const games = await this.getGames();
+      if (!games.length) return [];
 
-    // Fetch player prop odds for each game
-    const propsPromises = games.map(async (game) => {
-      try {
-        // The Odds API requires event IDs - we'll try to match by teams
-        const oddsData = await this.getOdds();
-        const matchingOddsGame = oddsData.games.find(
-          (og) => og.game.id === game.id
-        );
-        if (!matchingOddsGame) return [];
+      // Get OddsPapi fixtures
+      const oddsPapiFixtures = await this.getOddsPapiFixtures();
+      if (!oddsPapiFixtures.length) return [];
 
-        // Fetch player props for this specific game
-        // Note: The Odds API uses a different endpoint structure for player props
-        // We'll need to query with the sport and get player markets
-        const url = new URL("https://api.the-odds-api.com/v4/sports/icehockey_nhl/odds");
-        url.searchParams.set("apiKey", apiKey);
-        url.searchParams.set("regions", "us");
-        url.searchParams.set("markets", "player_goal_scorer_anytime,player_shots_on_goal");
-        url.searchParams.set("oddsFormat", "american");
-        
-        const response = await fetch(url, { headers: { accept: "application/json" } });
-        if (!response.ok) return [];
-        
-        const rawEvents = (await response.json()) as any[];
-        
-        // Find the event matching our game
+      // Get player prop markets
+      const playerPropMarkets = await this.getOddsPapiMarkets();
+      if (!playerPropMarkets.length) return [];
+
+      // Match NHL games to OddsPapi fixtures
+      const playerProps: Array<{
+        playerName: string;
+        market: string;
+        odds: number;
+        bookmaker: string;
+        line?: number;
+      }> = [];
+
+      for (const game of games) {
         const away = canonicalTeamName(game.awayTeam.name);
         const home = canonicalTeamName(game.homeTeam.name);
-        const event = rawEvents.find((e) => 
-          canonicalTeamName(e.away_team || "") === away && 
-          canonicalTeamName(e.home_team || "") === home
+
+        // Find matching OddsPapi fixture
+        const fixture = oddsPapiFixtures.find(
+          (f) =>
+            canonicalTeamName(f.awayTeam) === away &&
+            canonicalTeamName(f.homeTeam) === home
         );
-        
-        if (!event || !event.bookmakers) return [];
 
-        // Extract player props from bookmakers
-        const playerProps: Array<{
-          playerName: string;
-          market: string;
-          odds: number;
-          bookmaker: string;
-          line?: number;
-        }> = [];
+        if (!fixture) continue;
 
-        event.bookmakers.forEach((bookmaker: any) => {
-          if (!bookmaker.markets) return;
-          
-          bookmaker.markets.forEach((market: any) => {
-            if (!market.outcomes) return;
-            
-            market.outcomes.forEach((outcome: any) => {
-              if (outcome.description) {
-                playerProps.push({
-                  playerName: outcome.description,
-                  market: market.key,
-                  odds: outcome.price,
-                  bookmaker: bookmaker.key,
-                  line: outcome.point,
-                });
-              }
+        // Fetch odds for this fixture
+        const oddsData = await this.getOddsPapiOdds(fixture.id);
+        if (!oddsData) continue;
+
+        // Extract player props from markets
+        for (const market of oddsData.markets) {
+          // Only process player prop markets
+          const isPlayerProp = playerPropMarkets.some(pm => pm.id === market.id);
+          if (!isPlayerProp) continue;
+
+          for (const selection of market.selections) {
+            if (!selection.player || !selection.prices.length) continue;
+
+            // Get the best price for this selection
+            const bestPrice = selection.prices[0]; // Use first available sportsbook
+
+            playerProps.push({
+              playerName: selection.player.name,
+              market: market.name,
+              odds: bestPrice.americanOdds,
+              bookmaker: bestPrice.sportsbookName,
+              line: bestPrice.line,
             });
-          });
-        });
-
-        return playerProps.map(prop => ({ ...prop, gameId: game.id }));
-      } catch (error) {
-        console.error(`Error fetching props for game ${game.id}:`, error);
-        return [];
+          }
+        }
       }
-    });
 
-    const allProps = await Promise.all(propsPromises);
-    return allProps.flat();
+      return playerProps;
+    } catch (error) {
+      console.error("Error fetching player props from OddsPapi:", error);
+      return [];
+    }
   }
 
   async getSnipes() {
@@ -893,8 +993,8 @@ class NhlWebApiProvider implements NhlDataProvider {
         provider: this.name,
         lastUpdated: new Date().toISOString(),
         message: games.length > 0
-          ? `Official NHL schedule, including preseason when available, standings, roster and player data is available. ${process.env.ODDS_API_KEY ? "Sportsbook odds are connected." : "Sportsbook odds are not configured."} Model feed is not configured.`
-          : `Official NHL data is connected, but no verified games were returned for today's NHL date. ${INCLUDE_PRESEASON ? "Preseason is included when the provider publishes it." : `Preseason is excluded before ${NHL_SEASON_START_DATE}.`} ${process.env.ODDS_API_KEY ? "Sportsbook odds are connected when markets are posted." : "Sportsbook odds are not configured."} Model feed is not configured.`,
+          ? `Official NHL schedule, including preseason when available, standings, roster and player data is available. ${ODDSPAPI_API_KEY ? "Sportsbook odds are connected via OddsPapi." : "Sportsbook odds are not configured."} Model feed is not configured.`
+          : `Official NHL data is connected, but no verified games were returned for today's NHL date. ${INCLUDE_PRESEASON ? "Preseason is included when the provider publishes it." : `Preseason is excluded before ${NHL_SEASON_START_DATE}.`} ${ODDSPAPI_API_KEY ? "Sportsbook odds are connected via OddsPapi when markets are posted." : "Sportsbook odds are not configured."} Model feed is not configured.`,
       },
       games: games.length,
       snipes: 0,

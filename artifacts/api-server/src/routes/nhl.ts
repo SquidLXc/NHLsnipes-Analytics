@@ -149,7 +149,8 @@ router.get("/props/:market", async (req, res) => {
 
 router.get("/odds", async (_req, res) => {
   try {
-    res.json(await getNhlProvider().getOdds());
+    const odds = await getNhlProvider().getOdds();
+    res.json(odds);
   } catch (error) {
     handleProviderError(res, error);
   }

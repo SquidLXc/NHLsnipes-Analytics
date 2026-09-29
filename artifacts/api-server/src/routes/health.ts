@@ -23,7 +23,7 @@ router.get("/healthz", async (_req, res) => {
   const providerStatus = dataHealth.connection === "error" ? "error" : "connected";
   const configurationProblems = [
     ...(!databaseConfigured ? ["DATABASE_URL is not configured"] : []),
-    ...(process.env.ODDS_API_KEY ? [] : ["ODDS_API_KEY is not configured; sportsbook odds will be unavailable"]),
+    ...(process.env.ODDSPAPI_API_KEY ? [] : ["ODDSPAPI_API_KEY is not configured; sportsbook odds will be unavailable"]),
   ];
   const status = databaseStatus === "connected" && providerStatus === "connected" ? "ok" : "degraded";
   const data = HealthCheckResponse.parse({

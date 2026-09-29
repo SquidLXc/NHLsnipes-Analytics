@@ -7,7 +7,7 @@ import adminRouter from "./admin";
 const router: IRouter = Router();
 
 router.use(healthRouter);
-router.use(nhlRouter);
+router.use("/nhl", nhlRouter);
 router.use("/auth/discord", discordAuthRouter);
 router.use("/admin", adminRouter);
 
