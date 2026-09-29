@@ -43,6 +43,22 @@ router.get("/games/today", async (req, res) => {
   }
 });
 
+router.get("/games/:gameId", async (req, res) => {
+  try {
+    const provider = getNhlProvider();
+    const gameId = req.params.gameId as string;
+    const game = await provider.getGame(gameId);
+    res.json(game);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Game detail request failed";
+    res.status(503).json({
+      error: "Game detail unavailable",
+      code: "GAME_DETAIL_UNAVAILABLE",
+      message,
+    });
+  }
+});
+
 router.get("/games/future", async (req, res) => {
   try {
     const provider = getNhlProvider();
@@ -121,6 +137,22 @@ router.get("/players", async (req, res) => {
   }
 });
 
+router.get("/players/:playerId", async (req, res) => {
+  try {
+    const provider = getNhlProvider();
+    const playerId = req.params.playerId as string;
+    const player = await provider.getPlayer(playerId);
+    res.json(player);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Player detail request failed";
+    res.status(503).json({
+      error: "Player detail unavailable",
+      code: "PLAYER_DETAIL_UNAVAILABLE",
+      message,
+    });
+  }
+});
+
 router.get("/props", async (req, res) => {
   try {
     const provider = getNhlProvider();
@@ -168,6 +200,22 @@ router.get("/matchups", async (req, res) => {
   }
 });
 
+router.get("/matchups/:gameId", async (req, res) => {
+  try {
+    const provider = getNhlProvider();
+    const gameId = req.params.gameId as string;
+    const matchup = await provider.getMatchup(gameId);
+    res.json(matchup);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Matchup detail request failed";
+    res.status(503).json({
+      error: "Matchup detail unavailable",
+      code: "MATCHUP_DETAIL_UNAVAILABLE",
+      message,
+    });
+  }
+});
+
 router.get("/goalies", async (req, res) => {
   try {
     const provider = getNhlProvider();
@@ -193,6 +241,52 @@ router.get("/teams", async (req, res) => {
     res.status(503).json({
       error: "Teams unavailable",
       code: "TEAMS_UNAVAILABLE",
+      message,
+    });
+  }
+});
+
+router.get("/teams/:teamId", async (req, res) => {
+  try {
+    const provider = getNhlProvider();
+    const teamId = req.params.teamId as string;
+    const team = await provider.getTeam(teamId);
+    res.json(team);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Team detail request failed";
+    res.status(503).json({
+      error: "Team detail unavailable",
+      code: "TEAM_DETAIL_UNAVAILABLE",
+      message,
+    });
+  }
+});
+
+router.get("/audit", async (req, res) => {
+  try {
+    const provider = getNhlProvider();
+    const audit = await provider.getAudit();
+    res.json(audit);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Audit request failed";
+    res.status(503).json({
+      error: "Audit unavailable",
+      code: "AUDIT_UNAVAILABLE",
+      message,
+    });
+  }
+});
+
+router.get("/model-performance", async (req, res) => {
+  try {
+    const provider = getNhlProvider();
+    const performance = await provider.getPerformance();
+    res.json(performance);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Model performance request failed";
+    res.status(503).json({
+      error: "Model performance unavailable",
+      code: "MODEL_PERFORMANCE_UNAVAILABLE",
       message,
     });
   }
