@@ -771,8 +771,10 @@ class NhlWebApiProvider implements NhlDataProvider {
           const seasonGoalsPerGame = seasonStats.goals / seasonGames;
           const seasonShotsPerGame = seasonStats.sog / seasonGames;
 
-          // Calculate probability based on player performance
-        const overProbability = Math.min(0.8, Math.max(0.2, seasonGoalsPerGame * 2));
+          // Calculate probability based on player performance - make it more realistic
+        const baseProbability = seasonGoalsPerGame * 0.8; // Base probability based on goals per game
+        const positionBonus = player.position === 'C' ? 0.05 : player.position === 'W' ? 0.03 : 0; // Bonus for offensive positions
+        const overProbability = Math.min(0.75, Math.max(0.05, baseProbability + positionBonus));
         const underProbability = 1 - overProbability;
         const modelProjection = seasonGoalsPerGame;
 
