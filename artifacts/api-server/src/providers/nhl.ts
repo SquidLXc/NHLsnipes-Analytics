@@ -1080,64 +1080,6 @@ class NhlWebApiProvider implements NhlDataProvider {
     }
   }
 
-  private extractPlayerPropsFromBookmakerOdds(bookmakerOdds: any, playerProps: any[]) {
-    for (const [bookmakerName, bookmakerData] of Object.entries(bookmakerOdds)) {
-      const bookmaker = bookmakerData as any;
-      if (!bookmaker.markets) {
-        console.log(`No markets for bookmaker ${bookmakerName}`);
-        continue;
-      }
-
-      console.log(`Processing bookmaker ${bookmakerName} with ${Object.keys(bookmaker.markets).length} markets`);
-
-      for (const [marketId, marketData] of Object.entries(bookmaker.markets)) {
-        const market = marketData as any;
-        if (!market.outcomes) {
-          console.log(`No outcomes for market ${marketId}`);
-          continue;
-        }
-
-        console.log(`Market ${marketId} has ${Object.keys(market.outcomes).length} outcomes`);
-
-        // Look for player props (markets with playerName in outcomes)
-        for (const [outcomeId, outcomeData] of Object.entries(market.outcomes)) {
-          const outcome = outcomeData as any;
-          if (!outcome.players) {
-            console.log(`No players for outcome ${outcomeId}`);
-            continue;
-          }
-
-          console.log(`Outcome ${outcomeId} has ${Object.keys(outcome.players).length} players`);
-
-          for (const [playerId, playerData] of Object.entries(outcome.players)) {
-            const player = playerData as any;
-            console.log(`Player data:`, JSON.stringify(player).substring(0, 200));
-            
-            if (player.playerName && player.price) {
-              playerProps.push({
-                playerName: player.playerName,
-                market: marketId, // Using marketId as market name for now
-                odds: player.price,
-                bookmaker: bookmakerName,
-                line: player.line,
-              });
-              console.log(`Added player prop: ${player.playerName} at ${player.price}`);
-            }
-          }
-        }
-      }
-    }
-  }
-
-      console.log(`=== Final count: Extracted ${playerProps.length} player props from OddsPapi ===`);
-      return playerProps;
-    } catch (error) {
-      console.error("Error fetching player props from OddsPapi:", error);
-      console.error("Error details:", error instanceof Error ? error.message : String(error));
-      return [];
-    }
-  }
-
   async getSnipes() {
     try {
       const props = await this.getProps();
