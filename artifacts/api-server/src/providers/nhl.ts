@@ -358,8 +358,16 @@ class NhlWebApiProvider implements NhlDataProvider {
     if (response.status === 429) {
       throw new Error("OddsPapi rate limit exceeded");
     }
-    if (!response.ok) throw new Error(`OddsPapi returned HTTP ${response.status} for ${path}`);
-    return (await response.json()) as T;
+    if (!response.ok) {
+      console.error(`OddsPapi returned HTTP ${response.status} for ${path}`);
+      throw new Error(`OddsPapi returned HTTP ${response.status} for ${path}`);
+    }
+    try {
+      return (await response.json()) as T;
+    } catch (error) {
+      console.error(`Failed to parse OddsPapi JSON response for ${path}:`, error);
+      throw error;
+    }
   }
 
   private async loadTeams() {
@@ -433,9 +441,14 @@ class NhlWebApiProvider implements NhlDataProvider {
         }
       }),
     );
-    playersCache = GetPlayersResponse.parse(
-      Array.from(new Map(rosters.flat().map((player) => [player.id, player])).values()),
-    );
+    try {
+      playersCache = GetPlayersResponse.parse(
+        Array.from(new Map(rosters.flat().map((player) => [player.id, player])).values()),
+      );
+    } catch (error) {
+      console.error("Failed to parse players response:", error);
+      playersCache = GetPlayersResponse.parse([]);
+    }
     playersCacheAt = Date.now();
     return playersCache;
   }
@@ -822,7 +835,12 @@ class NhlWebApiProvider implements NhlDataProvider {
     const validProps = props.filter((p): p is NonNullable<typeof p> => p !== null);
     validProps.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
 
-    return GetPropsResponse.parse(validProps);
+    try {
+      return GetPropsResponse.parse(validProps);
+    } catch (error) {
+      console.error("Failed to parse props response:", error);
+      return GetPropsResponse.parse([]);
+    }
     } catch (error) {
       console.error("getProps error:", error);
       return GetPropsResponse.parse([]);
@@ -993,7 +1011,12 @@ class NhlWebApiProvider implements NhlDataProvider {
       const props = await this.getProps();
       // Return top props as snipes (any with edge > 0)
       const snipes = props.filter(p => p.edge !== null && p.edge > 0).slice(0, 10);
-      return GetSnipesResponse.parse(snipes);
+      try {
+        return GetSnipesResponse.parse(snipes);
+      } catch (error) {
+        console.error("Failed to parse snipes response:", error);
+        return GetSnipesResponse.parse([]);
+      }
     } catch (error) {
       console.error("getSnipes error:", error);
       return GetSnipesResponse.parse([]);
@@ -1015,7 +1038,12 @@ class NhlWebApiProvider implements NhlDataProvider {
         result: null,
         settled: false
       }));
-      return GetAuditResponse.parse(auditRecords);
+      try {
+        return GetAuditResponse.parse(auditRecords);
+      } catch (error) {
+        console.error("Failed to parse audit response:", error);
+        return GetAuditResponse.parse([]);
+      }
     } catch (error) {
       console.error("getAudit error:", error);
       return GetAuditResponse.parse([]);
@@ -1034,22 +1062,40 @@ class NhlWebApiProvider implements NhlDataProvider {
         this.getSnipes()
       ]);
       const topConfidence = snipes.length > 0 ? snipes[0] : null;
-      return GetDashboardSummaryResponse.parse({
-        dataStatus: {
-          state: games.length > 0 ? "live" : "partial",
-          provider: this.name,
-          lastUpdated: new Date().toISOString(),
-          message: games.length > 0
-            ? `Official NHL schedule, including preseason when available, standings, roster and player data is available. ${ODDSPAPI_API_KEY ? "Sportsbook odds are connected via OddsPapi." : "Sportsbook odds are not configured."} Model feed is not configured.`
-            : `Official NHL data is connected, but no verified games were returned for today's NHL date. ${INCLUDE_PRESEASON ? "Preseason is included when the provider publishes it." : `Preseason is excluded before ${NHL_SEASON_START_DATE}.`} ${ODDSPAPI_API_KEY ? "Sportsbook odds are connected via OddsPapi when markets are posted." : "Sportsbook odds are not configured."} Model feed is not configured.`,
-        },
-        games: games.length,
-        snipes: snipes.length,
-        playersAnalyzed: players.length,
-        topConfidence,
-        modelVersion: "data-only",
-        marketPerformance: [],
-      });
+      try {
+        return GetDashboardSummaryResponse.parse({
+          dataStatus: {
+            state: games.length > 0 ? "live" : "partial",
+            provider: this.name,
+            lastUpdated: new Date().toISOString(),
+            message: games.length > 0
+              ? `Official NHL schedule, including preseason when available, standings, roster and player data is available. ${ODDSPAPI_API_KEY ? "Sportsbook odds are connected via OddsPapi." : "Sportsbook odds are not configured."} Model feed is not configured.`
+              : `Official NHL data is connected, but no verified games were returned for today's NHL date. ${INCLUDE_PRESEASON ? "Preseason is included when the provider publishes it." : `Preseason is excluded before ${NHL_SEASON_START_DATE}.`} ${ODDSPAPI_API_KEY ? "Sportsbook odds are connected via OddsPapi when markets are posted." : "Sportsbook odds are not configured."} Model feed is not configured.`,
+          },
+          games: games.length,
+          snipes: snipes.length,
+          playersAnalyzed: players.length,
+          topConfidence,
+          modelVersion: "data-only",
+          marketPerformance: [],
+        });
+      } catch (error) {
+        console.error("Failed to parse dashboard response:", error);
+        return GetDashboardSummaryResponse.parse({
+          dataStatus: {
+            state: "partial",
+            provider: this.name,
+            lastUpdated: new Date().toISOString(),
+            message: "Dashboard parsing error"
+          },
+          games: games.length,
+          snipes: snipes.length,
+          playersAnalyzed: players.length,
+          topConfidence: null,
+          modelVersion: "data-only",
+          marketPerformance: [],
+        });
+      }
     } catch (error) {
       console.error("getDashboard error:", error);
       return GetDashboardSummaryResponse.parse({
