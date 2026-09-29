@@ -58,6 +58,21 @@ router.get("/games/future", async (req, res) => {
   }
 });
 
+router.get("/games", async (req, res) => {
+  try {
+    const provider = getNhlProvider();
+    const games = await provider.getGames();
+    res.json(games);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Games request failed";
+    res.status(503).json({
+      error: "Games unavailable",
+      code: "GAMES_UNAVAILABLE",
+      message,
+    });
+  }
+});
+
 router.get("/games/:gameId", async (req, res) => {
   try {
     const provider = getNhlProvider();
