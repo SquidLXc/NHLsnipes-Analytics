@@ -383,85 +383,42 @@ class NhlWebApiProvider implements NhlDataProvider {
       console.log("API Key configured:", !!ODDSPAPI_API_KEY);
       console.log("API Key:", ODDSPAPI_API_KEY ? ODDSPAPI_API_KEY.substring(0, 8) + "..." : "none");
       
-      // First get tournaments for sportId 15 (hockey) with caching
-      let tournaments;
-      if (tournamentsCache && tournamentsCache.expiresAt > Date.now()) {
-        console.log("Using cached tournaments");
-        tournaments = tournamentsCache.data;
-      } else {
-        console.log("Fetching tournaments for sportId 15...");
-        tournaments = await this.fetchOddsPapiJson<any>(
-          `tournaments?sportId=15`
-        );
-        tournamentsCache = { expiresAt: Date.now() + 300_000, data: tournaments }; // 5 min cache
-      }
+      // Try simple fixtures approach first
+      console.log("Trying basic fixtures endpoint for hockey...");
+      const fixtures = await this.fetchOddsPapiJson<any>(
+        `fixtures?sportId=15`
+      );
+      console.log(`OddsPapi fixtures response type:`, typeof fixtures);
+      console.log(`OddsPapi fixtures is array:`, Array.isArray(fixtures));
+      console.log(`OddsPapi fixtures length:`, Array.isArray(fixtures) ? fixtures.length : 'N/A');
+      console.log(`OddsPapi fixtures response:`, JSON.stringify(fixtures).substring(0, 800));
       
-      console.log(`OddsPapi tournaments response type:`, typeof tournaments);
-      console.log(`OddsPapi tournaments is array:`, Array.isArray(tournaments));
-      console.log(`OddsPapi tournaments length:`, Array.isArray(tournaments) ? tournaments.length : 'N/A');
-      console.log(`OddsPapi tournaments response:`, JSON.stringify(tournaments).substring(0, 800));
-      
-      // Find NHL tournament (look for common NHL tournament names)
-      const nhlTournament = Array.isArray(tournaments) ? tournaments.find((t: any) => 
-        t.tournamentName?.toLowerCase().includes('nhl') || 
-        t.tournamentSlug?.toLowerCase().includes('nhl')
-      ) : null;
-      
-      if (!nhlTournament) {
-        console.log('No NHL tournament found in OddsPapi tournaments');
-        console.log('Available tournaments:', Array.isArray(tournaments) ? tournaments.map((t: any) => t.tournamentName).join(', ') : 'none');
+      if (!Array.isArray(fixtures) || fixtures.length === 0) {
+        console.log("No fixtures returned from basic fixtures endpoint");
         return [];
       }
       
-      console.log(`Found NHL tournament: ${nhlTournament.tournamentName} (ID: ${nhlTournament.tournamentId})`);
+      // Try to get odds for first few fixtures with rate limiting
+      console.log(`Trying to get odds for first 2 fixtures...`);
+      const fixturesWithOdds = await Promise.all(
+        fixtures.slice(0, 2).map(async (fixture: any) => {
+          try {
+            await new Promise(resolve => setTimeout(resolve, 1500)); // Rate limit protection
+            console.log(`Fetching odds for fixture ${fixture.id}...`);
+            const fixtureOdds = await this.fetchOddsPapiJson<any>(
+              `odds?fixtureId=${fixture.id}`
+            );
+            console.log(`Odds for fixture ${fixture.id}:`, JSON.stringify(fixtureOdds).substring(0, 400));
+            return { ...fixture, odds: fixtureOdds };
+          } catch (error) {
+            console.log(`Failed to get odds for fixture ${fixture.id}:`, error instanceof Error ? error.message : String(error));
+            return { ...fixture, odds: null };
+          }
+        })
+      );
       
-      // Try different approaches to get odds
-      let oddsData;
-      
-      // First try odds-by-tournaments without oddsFormat parameter
-      try {
-        console.log(`Fetching odds-by-tournaments for tournament ID: ${nhlTournament.tournamentId}...`);
-        oddsData = await this.fetchOddsPapiJson<any>(
-          `odds-by-tournaments?tournamentIds=${nhlTournament.tournamentId}`
-        );
-        console.log(`OddsPapi odds-by-tournaments response type:`, typeof oddsData);
-        console.log(`OddsPapi odds-by-tournaments is array:`, Array.isArray(oddsData));
-        console.log(`OddsPapi odds-by-tournaments length:`, Array.isArray(oddsData) ? oddsData.length : 'N/A');
-        console.log(`OddsPapi odds-by-tournaments response:`, JSON.stringify(oddsData).substring(0, 800));
-      } catch (error) {
-        console.log(`odds-by-tournaments failed, trying fixtures endpoint instead...`);
-        
-        // Fall back to fixtures endpoint
-        const fixtures = await this.fetchOddsPapiJson<any>(
-          `fixtures?sportId=15&tournamentId=${nhlTournament.tournamentId}`
-        );
-        console.log(`OddsPapi fixtures response:`, JSON.stringify(fixtures).substring(0, 800));
-        
-        // Try to get odds for each fixture (reduced to 2 to avoid rate limiting)
-        if (Array.isArray(fixtures) && fixtures.length > 0) {
-          console.log(`Trying to get odds for ${Math.min(2, fixtures.length)} fixtures (rate limit protection)...`);
-          const fixturesWithOdds = await Promise.all(
-            fixtures.slice(0, 2).map(async (fixture: any) => {
-              try {
-                await new Promise(resolve => setTimeout(resolve, 1000)); // Rate limit protection
-                const fixtureOdds = await this.fetchOddsPapiJson<any>(
-                  `odds?fixtureId=${fixture.id}`
-                );
-                return { ...fixture, odds: fixtureOdds };
-              } catch (error) {
-                console.log(`Failed to get odds for fixture ${fixture.id}`);
-                return { ...fixture, odds: null };
-              }
-            })
-          );
-          return fixturesWithOdds;
-        }
-        
-        return [];
-      }
-      
-      // Return the fixtures from the odds response
-      return Array.isArray(oddsData) ? oddsData : [];
+      console.log(`Returning ${fixturesWithOdds.length} fixtures with odds data`);
+      return fixturesWithOdds;
     } catch (error) {
       console.error("Failed to fetch OddsPapi fixtures:", error);
       console.error("Error details:", error instanceof Error ? error.message : String(error));
@@ -472,6 +429,55 @@ class NhlWebApiProvider implements NhlDataProvider {
   private async getOddsPapiMarkets(): Promise<OddsPapiMarket[]> {
     // No longer needed with the new odds-by-tournaments approach
     return [];
+  }
+
+  private extractPlayerPropsFromBookmakerOdds(bookmakerOdds: any, playerProps: any[]) {
+    for (const [bookmakerName, bookmakerData] of Object.entries(bookmakerOdds)) {
+      const bookmaker = bookmakerData as any;
+      if (!bookmaker.markets) {
+        console.log(`No markets for bookmaker ${bookmakerName}`);
+        continue;
+      }
+
+      console.log(`Processing bookmaker ${bookmakerName} with ${Object.keys(bookmaker.markets).length} markets`);
+
+      for (const [marketId, marketData] of Object.entries(bookmaker.markets)) {
+        const market = marketData as any;
+        if (!market.outcomes) {
+          console.log(`No outcomes for market ${marketId}`);
+          continue;
+        }
+
+        console.log(`Market ${marketId} has ${Object.keys(market.outcomes).length} outcomes`);
+
+        // Look for player props (markets with playerName in outcomes)
+        for (const [outcomeId, outcomeData] of Object.entries(market.outcomes)) {
+          const outcome = outcomeData as any;
+          if (!outcome.players) {
+            console.log(`No players for outcome ${outcomeId}`);
+            continue;
+          }
+
+          console.log(`Outcome ${outcomeId} has ${Object.keys(outcome.players).length} players`);
+
+          for (const [playerId, playerData] of Object.entries(outcome.players)) {
+            const player = playerData as any;
+            console.log(`Player data:`, JSON.stringify(player).substring(0, 200));
+            
+            if (player.playerName && player.price) {
+              playerProps.push({
+                playerName: player.playerName,
+                market: marketId, // Using marketId as market name for now
+                odds: player.price,
+                bookmaker: bookmakerName,
+                line: player.line,
+              });
+              console.log(`Added player prop: ${player.playerName} at ${player.price}`);
+            }
+          }
+        }
+      }
+    }
   }
 
   private async getOddsPapiOdds(fixtureId: number): Promise<OddsPapiOddsResponse | null> {
@@ -1011,66 +1017,93 @@ class NhlWebApiProvider implements NhlDataProvider {
 
       for (const fixture of oddsPapiFixtures) {
         console.log(`Processing fixture ${fixture.fixtureId || fixture.id}`);
+        console.log(`Full fixture structure:`, JSON.stringify(fixture).substring(0, 500));
         
         // Handle both bookmakerOdds structure and odds property from fallback
-        const bookmakerOdds = fixture.bookmakerOdds || (fixture.odds?.bookmakerOdds);
+        const bookmakerOdds = fixture.bookmakerOdds || (fixture.odds?.bookmakerOdds) || fixture.odds;
         console.log(`Fixture has bookmakerOdds:`, !!bookmakerOdds);
+        console.log(`BookmakerOdds type:`, typeof bookmakerOdds);
         
         if (!bookmakerOdds) {
           console.log(`No bookmakerOdds for fixture ${fixture.fixtureId || fixture.id}`);
           continue;
         }
 
-        console.log(`Bookmakers for fixture ${fixture.fixtureId || fixture.id}:`, Object.keys(bookmakerOdds).join(', '));
+        console.log(`BookmakerOdds structure:`, JSON.stringify(bookmakerOdds).substring(0, 500));
 
-        // Extract player props from the fixture's bookmakerOdds
-        for (const [bookmakerName, bookmakerData] of Object.entries(bookmakerOdds)) {
-          const bookmaker = bookmakerData as any;
-          if (!bookmaker.markets) {
-            console.log(`No markets for bookmaker ${bookmakerName}`);
+        // Extract player props - try different possible structures
+        if (Array.isArray(bookmakerOdds)) {
+          console.log(`bookmakerOdds is array with ${bookmakerOdds.length} items`);
+          for (const item of bookmakerOdds) {
+            console.log(`Processing bookmakerOdds array item:`, JSON.stringify(item).substring(0, 300));
+            // Try to extract player props from array structure
+            if (item.bookmakerOdds) {
+              this.extractPlayerPropsFromBookmakerOdds(item.bookmakerOdds, playerProps);
+            }
+          }
+        } else if (typeof bookmakerOdds === 'object') {
+          console.log(`bookmakerOdds is object with keys:`, Object.keys(bookmakerOdds).join(', '));
+          this.extractPlayerPropsFromBookmakerOdds(bookmakerOdds, playerProps);
+        }
+      }
+
+      console.log(`=== Final count: Extracted ${playerProps.length} player props from OddsPapi ===`);
+      return playerProps;
+    } catch (error) {
+      console.error("Error fetching player props from OddsPapi:", error);
+      console.error("Error details:", error instanceof Error ? error.message : String(error));
+      return [];
+    }
+  }
+
+  private extractPlayerPropsFromBookmakerOdds(bookmakerOdds: any, playerProps: any[]) {
+    for (const [bookmakerName, bookmakerData] of Object.entries(bookmakerOdds)) {
+      const bookmaker = bookmakerData as any;
+      if (!bookmaker.markets) {
+        console.log(`No markets for bookmaker ${bookmakerName}`);
+        continue;
+      }
+
+      console.log(`Processing bookmaker ${bookmakerName} with ${Object.keys(bookmaker.markets).length} markets`);
+
+      for (const [marketId, marketData] of Object.entries(bookmaker.markets)) {
+        const market = marketData as any;
+        if (!market.outcomes) {
+          console.log(`No outcomes for market ${marketId}`);
+          continue;
+        }
+
+        console.log(`Market ${marketId} has ${Object.keys(market.outcomes).length} outcomes`);
+
+        // Look for player props (markets with playerName in outcomes)
+        for (const [outcomeId, outcomeData] of Object.entries(market.outcomes)) {
+          const outcome = outcomeData as any;
+          if (!outcome.players) {
+            console.log(`No players for outcome ${outcomeId}`);
             continue;
           }
 
-          console.log(`Processing bookmaker ${bookmakerName} with ${Object.keys(bookmaker.markets).length} markets`);
+          console.log(`Outcome ${outcomeId} has ${Object.keys(outcome.players).length} players`);
 
-          for (const [marketId, marketData] of Object.entries(bookmaker.markets)) {
-            const market = marketData as any;
-            if (!market.outcomes) {
-              console.log(`No outcomes for market ${marketId}`);
-              continue;
-            }
-
-            console.log(`Market ${marketId} has ${Object.keys(market.outcomes).length} outcomes`);
-
-            // Look for player props (markets with playerName in outcomes)
-            for (const [outcomeId, outcomeData] of Object.entries(market.outcomes)) {
-              const outcome = outcomeData as any;
-              if (!outcome.players) {
-                console.log(`No players for outcome ${outcomeId}`);
-                continue;
-              }
-
-              console.log(`Outcome ${outcomeId} has ${Object.keys(outcome.players).length} players`);
-
-              for (const [playerId, playerData] of Object.entries(outcome.players)) {
-                const player = playerData as any;
-                console.log(`Player data:`, JSON.stringify(player).substring(0, 200));
-                
-                if (player.playerName && player.price) {
-                  playerProps.push({
-                    playerName: player.playerName,
-                    market: marketId, // Using marketId as market name for now
-                    odds: player.price,
-                    bookmaker: bookmakerName,
-                    line: player.line,
-                  });
-                  console.log(`Added player prop: ${player.playerName} at ${player.price}`);
-                }
-              }
+          for (const [playerId, playerData] of Object.entries(outcome.players)) {
+            const player = playerData as any;
+            console.log(`Player data:`, JSON.stringify(player).substring(0, 200));
+            
+            if (player.playerName && player.price) {
+              playerProps.push({
+                playerName: player.playerName,
+                market: marketId, // Using marketId as market name for now
+                odds: player.price,
+                bookmaker: bookmakerName,
+                line: player.line,
+              });
+              console.log(`Added player prop: ${player.playerName} at ${player.price}`);
             }
           }
         }
       }
+    }
+  }
 
       console.log(`=== Final count: Extracted ${playerProps.length} player props from OddsPapi ===`);
       return playerProps;
