@@ -103,4 +103,99 @@ router.get("/odds", async (req, res) => {
   }
 });
 
+// Add players and other missing routes
+router.get("/players", async (req, res) => {
+  try {
+    const provider = getNhlProvider();
+    const search = req.query.search as string | undefined;
+    const team = req.query.team as string | undefined;
+    const players = await provider.getPlayers(search, team);
+    res.json(players);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Players request failed";
+    res.status(503).json({
+      error: "Players unavailable",
+      code: "PLAYERS_UNAVAILABLE",
+      message,
+    });
+  }
+});
+
+router.get("/props", async (req, res) => {
+  try {
+    const provider = getNhlProvider();
+    const market = req.query.market as string | undefined;
+    const props = await provider.getProps(market);
+    res.json(props);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Props request failed";
+    res.status(503).json({
+      error: "Props unavailable",
+      code: "PROPS_UNAVAILABLE",
+      message,
+    });
+  }
+});
+
+router.get("/props/:market", async (req, res) => {
+  try {
+    const provider = getNhlProvider();
+    const market = req.params.market as string;
+    const props = await provider.getPropsByMarket(market);
+    res.json(props);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Props by market request failed";
+    res.status(503).json({
+      error: "Props by market unavailable",
+      code: "PROPS_BY_MARKET_UNAVAILABLE",
+      message,
+    });
+  }
+});
+
+router.get("/matchups", async (req, res) => {
+  try {
+    const provider = getNhlProvider();
+    const matchups = await provider.getMatchups();
+    res.json(matchups);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Matchups request failed";
+    res.status(503).json({
+      error: "Matchups unavailable",
+      code: "MATCHUPS_UNAVAILABLE",
+      message,
+    });
+  }
+});
+
+router.get("/goalies", async (req, res) => {
+  try {
+    const provider = getNhlProvider();
+    const goalies = await provider.getGoalies();
+    res.json(goalies);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Goalies request failed";
+    res.status(503).json({
+      error: "Goalies unavailable",
+      code: "GOALIES_UNAVAILABLE",
+      message,
+    });
+  }
+});
+
+router.get("/teams", async (req, res) => {
+  try {
+    const provider = getNhlProvider();
+    const teams = await provider.getTeams();
+    res.json(teams);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Teams request failed";
+    res.status(503).json({
+      error: "Teams unavailable",
+      code: "TEAMS_UNAVAILABLE",
+      message,
+    });
+  }
+});
+
 export default router;
