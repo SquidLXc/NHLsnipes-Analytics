@@ -239,6 +239,7 @@ let playersCache: ProviderData["players"] | null = null;
 let playersCacheAt = 0;
 let oddsCache: { expiresAt: number; data: ProviderData["odds"] } | null = null;
 let tournamentsCache: { expiresAt: number; data: any } | null = null;
+let fixturesCache: { expiresAt: number; data: any } | null = null;
 
 function text(value: string | undefined, fallback: string) {
   return value?.trim() || fallback;
@@ -383,10 +384,16 @@ class NhlWebApiProvider implements NhlDataProvider {
       console.log("API Key configured:", !!ODDSPAPI_API_KEY);
       console.log("API Key:", ODDSPAPI_API_KEY ? ODDSPAPI_API_KEY.substring(0, 8) + "..." : "none");
       
-      // Try simple fixtures approach first
-      console.log("Trying basic fixtures endpoint for hockey...");
+      // Use cached fixtures if available to avoid rate limiting
+      if (fixturesCache && fixturesCache.expiresAt > Date.now()) {
+        console.log("Using cached fixtures");
+        return fixturesCache.data;
+      }
+      
+      // Try fixtures endpoint for current/upcoming games with odds
+      console.log("Trying fixtures endpoint for current hockey games with odds...");
       const fixtures = await this.fetchOddsPapiJson<any>(
-        `fixtures?sportId=15`
+        `fixtures?sportId=15&hasOdds=true`
       );
       console.log(`OddsPapi fixtures response type:`, typeof fixtures);
       console.log(`OddsPapi fixtures is array:`, Array.isArray(fixtures));
@@ -394,30 +401,47 @@ class NhlWebApiProvider implements NhlDataProvider {
       console.log(`OddsPapi fixtures response:`, JSON.stringify(fixtures).substring(0, 800));
       
       if (!Array.isArray(fixtures) || fixtures.length === 0) {
-        console.log("No fixtures returned from basic fixtures endpoint");
+        console.log("No fixtures with odds returned, trying all fixtures...");
+        const allFixtures = await this.fetchOddsPapiJson<any>(
+          `fixtures?sportId=15`
+        );
+        console.log(`All fixtures response:`, JSON.stringify(allFixtures).substring(0, 400));
+        fixturesCache = { expiresAt: Date.now() + 300_000, data: [] }; // Cache empty result
+        return [];
+      }
+      
+      // Filter for current/upcoming games (not finished)
+      const currentFixtures = fixtures.filter((f: any) => f.statusId !== 2); // statusId 2 = finished
+      console.log(`Filtered to ${currentFixtures.length} current/upcoming fixtures`);
+      
+      if (currentFixtures.length === 0) {
+        console.log("No current fixtures with odds available");
+        fixturesCache = { expiresAt: Date.now() + 300_000, data: [] }; // Cache empty result
         return [];
       }
       
       // Try to get odds for first few fixtures with rate limiting
-      console.log(`Trying to get odds for first 2 fixtures...`);
+      console.log(`Trying to get odds for first 2 current fixtures...`);
       const fixturesWithOdds = await Promise.all(
-        fixtures.slice(0, 2).map(async (fixture: any) => {
+        currentFixtures.slice(0, 2).map(async (fixture: any) => {
           try {
-            await new Promise(resolve => setTimeout(resolve, 1500)); // Rate limit protection
-            console.log(`Fetching odds for fixture ${fixture.id}...`);
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Rate limit protection
+            const fixtureId = fixture.fixtureId || fixture.id; // Handle both field names
+            console.log(`Fetching odds for fixture ${fixtureId}...`);
             const fixtureOdds = await this.fetchOddsPapiJson<any>(
-              `odds?fixtureId=${fixture.id}`
+              `odds?fixtureId=${fixtureId}`
             );
-            console.log(`Odds for fixture ${fixture.id}:`, JSON.stringify(fixtureOdds).substring(0, 400));
+            console.log(`Odds for fixture ${fixtureId}:`, JSON.stringify(fixtureOdds).substring(0, 400));
             return { ...fixture, odds: fixtureOdds };
           } catch (error) {
-            console.log(`Failed to get odds for fixture ${fixture.id}:`, error instanceof Error ? error.message : String(error));
+            console.log(`Failed to get odds for fixture:`, error instanceof Error ? error.message : String(error));
             return { ...fixture, odds: null };
           }
         })
       );
       
       console.log(`Returning ${fixturesWithOdds.length} fixtures with odds data`);
+      fixturesCache = { expiresAt: Date.now() + 300_000, data: fixturesWithOdds }; // Cache result
       return fixturesWithOdds;
     } catch (error) {
       console.error("Failed to fetch OddsPapi fixtures:", error);
