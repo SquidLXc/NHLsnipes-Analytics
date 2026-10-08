@@ -468,6 +468,8 @@ class NhlWebApiProvider implements NhlDataProvider {
     // Only extract from DraftKings and a few major sportsbooks to save quota
     const priorityBookmakers = ['draftkings', 'fanduel', 'betmgm', 'caesars', 'pointsbet', 'bet365'];
     
+    let totalExtracted = 0;
+    
     for (const [bookmakerName, bookmakerData] of Object.entries(bookmakerOdds)) {
       // Skip if not a priority bookmaker
       if (!priorityBookmakers.some(b => bookmakerName.toLowerCase().includes(b))) {
@@ -509,10 +511,13 @@ class NhlWebApiProvider implements NhlDataProvider {
                 bookmaker: bookmakerName,
                 line: player.line || null,
               });
+              totalExtracted++;
             }
           }
         }
       }
+      
+      console.log(`Extracted ${totalExtracted} props from ${bookmakerName}`);
     }
   }
 
@@ -935,6 +940,17 @@ class NhlWebApiProvider implements NhlDataProvider {
             }
           }
         }
+        
+        // Debug first few players
+        if (relevantPlayers.indexOf(player) < 5) {
+          console.log(`Player ${player.fullName}:`, {
+            canonical: playerCanonical,
+            lastFirst: playerLastFirst,
+            found: !!matchingOdds,
+            odds: matchingOdds?.odds,
+            bookmaker: matchingOdds?.bookmaker
+          });
+        }
 
         const odds = matchingOdds?.odds ?? null;
         const line = matchingOdds?.line ?? null;
@@ -1109,6 +1125,12 @@ class NhlWebApiProvider implements NhlDataProvider {
       }
 
       console.log(`=== Final count: Extracted ${playerProps.length} player props from OddsPapi ===`);
+      console.log(`Sample player props:`, playerProps.slice(0, 10).map(p => ({
+        name: p.playerName,
+        bookmaker: p.bookmaker,
+        odds: p.odds,
+        market: p.market
+      })));
       return playerProps;
     } catch (error) {
       console.error("Error fetching player props from OddsPapi:", error);
