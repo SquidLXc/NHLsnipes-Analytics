@@ -878,7 +878,23 @@ class NhlWebApiProvider implements NhlDataProvider {
       for (const prop of playerPropsOdds) {
         const propCanonical = canonicalPlayerName(prop.playerName);
         oddsMap.set(propCanonical, { odds: prop.odds, line: prop.line, bookmaker: prop.bookmaker });
+        
+        // Also store variations for better matching
+        // If name has comma, it's "Last, First" format, add "First Last" variant
+        if (prop.playerName.includes(',')) {
+          const parts = prop.playerName.split(',').map(p => p.trim());
+          if (parts.length === 2) {
+            const firstLast = canonicalPlayerName(`${parts[1]} ${parts[0]}`);
+            oddsMap.set(firstLast, { odds: prop.odds, line: prop.line, bookmaker: prop.bookmaker });
+          }
+        }
       }
+      
+      // Debug: log sample odds
+      console.log(`=== OddsPapi Player Props Debug ===`);
+      console.log(`Total odds entries: ${oddsMap.size}`);
+      console.log(`Sample odds:`, Array.from(oddsMap.entries()).slice(0, 10).map(([k, v]) => `${k} -> ${v.bookmaker} @ ${v.odds}`));
+      console.log(`Sample players:`, relevantPlayers.slice(0, 5).map(p => p.fullName));
 
       // Calculate predictions for each player
       const props = await Promise.all(
@@ -906,7 +922,7 @@ class NhlWebApiProvider implements NhlDataProvider {
         const playerCanonical = canonicalPlayerName(player.fullName);
         const playerLastFirst = canonicalPlayerName(`${player.lastName}, ${player.firstName}`);
         
-        // Try exact match first, then partial matches
+        // Try exact match first
         let matchingOdds = oddsMap.get(playerCanonical) || oddsMap.get(playerLastFirst);
         
         // If no exact match, try finding by partial match
