@@ -441,6 +441,11 @@ class NhlWebApiProvider implements NhlDataProvider {
           const fixtureOdds = await this.fetchOddsPapiJson<any>(
             `odds?fixtureId=${fixtureId}`
           );
+          
+          // Check if fixtureOdds has bookmakerOdds
+          const hasOdds = fixtureOdds?.bookmakerOdds && Object.keys(fixtureOdds.bookmakerOdds).length > 0;
+          console.log(`Fixture ${fixtureId} odds result:`, hasOdds ? `SUCCESS - ${Object.keys(fixtureOdds.bookmakerOdds).length} bookmakers` : 'NO ODDS DATA');
+          
           fixturesWithOddsData.push({ ...fixture, odds: fixtureOdds });
         } catch (error) {
           console.log(`Failed to get odds for fixture:`, error instanceof Error ? error.message : String(error));
@@ -1132,6 +1137,7 @@ class NhlWebApiProvider implements NhlDataProvider {
 
         console.log(`Extracting player props from ${Object.keys(bookmakerOdds).length} bookmakers`);
         this.extractPlayerPropsFromBookmakerOdds(bookmakerOdds, playerProps);
+        console.log(`Total props extracted so far: ${playerProps.length}`);
       }
 
       console.log(`=== Final count: Extracted ${playerProps.length} player props from OddsPapi ===`);
