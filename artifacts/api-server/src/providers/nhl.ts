@@ -393,6 +393,11 @@ class NhlWebApiProvider implements NhlDataProvider {
         return fixturesCache.data;
       }
       
+      // If cache exists but is expired, log it
+      if (fixturesCache) {
+        console.log("Cache expired, fetching fresh fixtures");
+      }
+      
       // Get date range for fixtures (yesterday to tomorrow to include live games)
       const today = new Date();
       const yesterday = new Date(today);
@@ -416,7 +421,7 @@ class NhlWebApiProvider implements NhlDataProvider {
       
       if (!Array.isArray(fixtures) || fixtures.length === 0) {
         console.log("No fixtures returned");
-        fixturesCache = { expiresAt: Date.now() + 300_000, data: [] };
+        fixturesCache = { expiresAt: Date.now() + 600_000, data: [] };
         return [];
       }
       
@@ -426,14 +431,14 @@ class NhlWebApiProvider implements NhlDataProvider {
       
       if (fixturesWithOdds.length === 0) {
         console.log("No current fixtures with odds available");
-        fixturesCache = { expiresAt: Date.now() + 300_000, data: [] };
+        fixturesCache = { expiresAt: Date.now() + 600_000, data: [] };
         return [];
       }
       
-      // Try to get odds for fixtures sequentially to avoid rate limiting (limit to 3 to cover more games)
-      console.log(`Fetching odds for up to 3 fixtures sequentially...`);
+      // Try to get odds for fixtures sequentially to avoid rate limiting (limit to 2 to be safer on quota)
+      console.log(`Fetching odds for up to 2 fixtures sequentially...`);
       const fixturesWithOddsData: any[] = [];
-      for (const fixture of fixturesWithOdds.slice(0, 3)) {
+      for (const fixture of fixturesWithOdds.slice(0, 2)) {
         try {
           await new Promise(resolve => setTimeout(resolve, 3000)); // 3 second delay between requests
           const fixtureId = fixture.fixtureId;
@@ -448,17 +453,33 @@ class NhlWebApiProvider implements NhlDataProvider {
           
           fixturesWithOddsData.push({ ...fixture, odds: fixtureOdds });
         } catch (error) {
-          console.log(`Failed to get odds for fixture:`, error instanceof Error ? error.message : String(error));
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.log(`Failed to get odds for fixture:`, errorMessage);
+          
+          // If rate limited, try to return cached data if available
+          if (errorMessage.includes('rate limit') && fixturesCache) {
+            console.log("Rate limit hit, returning cached fixtures instead");
+            return fixturesCache.data;
+          }
+          
           fixturesWithOddsData.push({ ...fixture, odds: null });
         }
       }
       
       console.log(`Returning ${fixturesWithOddsData.length} fixtures with odds data`);
-      fixturesCache = { expiresAt: Date.now() + 300_000, data: fixturesWithOddsData };
+      fixturesCache = { expiresAt: Date.now() + 600_000, data: fixturesWithOddsData }; // 10 minute cache
       return fixturesWithOddsData;
     } catch (error) {
       console.error("Failed to fetch OddsPapi fixtures:", error);
       console.error("Error details:", error instanceof Error ? error.message : String(error));
+      
+      // If rate limited and we have cached data, return it
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('rate limit') && fixturesCache && fixturesCache.data.length > 0) {
+        console.log("Rate limit hit on fixtures endpoint, returning cached data");
+        return fixturesCache.data;
+      }
+      
       return [];
     }
   }
