@@ -430,24 +430,23 @@ class NhlWebApiProvider implements NhlDataProvider {
         return [];
       }
       
-      // Try to get odds for fixtures with rate limiting (limit to 5 to cover more games)
-      console.log(`Fetching odds for up to 5 fixtures...`);
-      const fixturesWithOddsData = await Promise.all(
-        fixturesWithOdds.slice(0, 5).map(async (fixture: any) => {
-          try {
-            await new Promise(resolve => setTimeout(resolve, 2000)); // Rate limit protection
-            const fixtureId = fixture.fixtureId;
-            console.log(`Fetching odds for fixture ${fixtureId} (${fixture.participant1Name} vs ${fixture.participant2Name})...`);
-            const fixtureOdds = await this.fetchOddsPapiJson<any>(
-              `odds?fixtureId=${fixtureId}`
-            );
-            return { ...fixture, odds: fixtureOdds };
-          } catch (error) {
-            console.log(`Failed to get odds for fixture:`, error instanceof Error ? error.message : String(error));
-            return { ...fixture, odds: null };
-          }
-        })
-      );
+      // Try to get odds for fixtures sequentially to avoid rate limiting (limit to 3 to cover more games)
+      console.log(`Fetching odds for up to 3 fixtures sequentially...`);
+      const fixturesWithOddsData: any[] = [];
+      for (const fixture of fixturesWithOdds.slice(0, 3)) {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 3000)); // 3 second delay between requests
+          const fixtureId = fixture.fixtureId;
+          console.log(`Fetching odds for fixture ${fixtureId} (${fixture.participant1Name} vs ${fixture.participant2Name})...`);
+          const fixtureOdds = await this.fetchOddsPapiJson<any>(
+            `odds?fixtureId=${fixtureId}`
+          );
+          fixturesWithOddsData.push({ ...fixture, odds: fixtureOdds });
+        } catch (error) {
+          console.log(`Failed to get odds for fixture:`, error instanceof Error ? error.message : String(error));
+          fixturesWithOddsData.push({ ...fixture, odds: null });
+        }
+      }
       
       console.log(`Returning ${fixturesWithOddsData.length} fixtures with odds data`);
       fixturesCache = { expiresAt: Date.now() + 300_000, data: fixturesWithOddsData };
@@ -480,8 +479,6 @@ class NhlWebApiProvider implements NhlDataProvider {
       if (!bookmaker.markets) {
         continue;
       }
-
-      console.log(`Processing bookmaker ${bookmakerName} with ${Object.keys(bookmaker.markets).length} markets`);
 
       for (const [marketId, marketData] of Object.entries(bookmaker.markets)) {
         const market = marketData as any;
@@ -874,6 +871,8 @@ class NhlWebApiProvider implements NhlDataProvider {
       // Limit to players in today's games to avoid timeouts
       const todayTeamIds = new Set(games.flatMap(g => [g.homeTeam.id, g.awayTeam.id]));
       const relevantPlayers = players.filter(p => todayTeamIds.has(p.team.id));
+      
+      let matchedPlayersCount = 0;
 
       // Create a map of canonical player names to odds for faster lookup
       const canonicalPlayerName = (name: string) =>
@@ -951,6 +950,11 @@ class NhlWebApiProvider implements NhlDataProvider {
             bookmaker: matchingOdds?.bookmaker
           });
         }
+        
+        // Count successful matches
+        if (matchingOdds) {
+          matchedPlayersCount++;
+        }
 
         const odds = matchingOdds?.odds ?? null;
         const line = matchingOdds?.line ?? null;
@@ -1000,6 +1004,12 @@ class NhlWebApiProvider implements NhlDataProvider {
     // Filter out nulls and sort by edge
     const validProps = props.filter((p): p is NonNullable<typeof p> => p !== null);
     validProps.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+    
+    console.log(`=== Props Summary ===`);
+    console.log(`Total players processed: ${relevantPlayers.length}`);
+    console.log(`Players with matched odds: ${matchedPlayersCount}`);
+    console.log(`Props with real odds: ${validProps.filter(p => p.lineStatus === 'available').length}`);
+    console.log(`Props without odds: ${validProps.filter(p => p.lineStatus === 'unavailable').length}`);
 
     try {
       return GetPropsResponse.parse(validProps);
