@@ -167,46 +167,50 @@ type NormalizedTeam = z.infer<typeof GetTeamsResponse>[number];
 
 // OddsPapi types
 type OddsPapiFixture = {
-  id: number;
-  tournamentId: number;
+  fixtureId: string;
+  participant1Id: number;
+  participant2Id: number;
   sportId: number;
-  homeTeam: string;
-  awayTeam: string;
+  tournamentId: number;
+  seasonId: number;
+  statusId: number;
+  hasOdds: boolean;
   startTime: string;
-  status: string;
+  participant1Name: string;
+  participant1ShortName: string;
+  participant1Abbr: string;
+  participant2Name: string;
+  participant2ShortName: string;
+  participant2Abbr: string;
+  sportName: string;
+  tournamentName: string;
+  odds?: {
+    bookmakerOdds: any;
+  };
 };
 
 type OddsPapiMarket = {
-  id: number;
-  name: string;
+  marketId: number;
+  marketName: string;
   playerProp: boolean;
 };
 
-type OddsPapiSelection = {
-  id: number;
-  name: string;
-  player?: {
-    id: number;
-    name: string;
-  };
-  status: string;
-  prices: Array<{
-    sportsbookId: number;
-    sportsbookName: string;
-    americanOdds: number;
-    decimalOdds: number;
-    line?: number;
-  }>;
-};
-
 type OddsPapiOddsResponse = {
-  fixtureId: number;
-  tournamentId: number;
-  sportId: number;
-  markets: Array<{
-    id: number;
-    name: string;
-    selections: OddsPapiSelection[];
+  fixtureId: string;
+  bookmakerOdds: Record<string, {
+    bookmakerIsActive: boolean;
+    markets: Record<string, {
+      marketActive: boolean;
+      outcomes: Record<string, {
+        players: Record<string, {
+          playerName?: string;
+          price?: number;
+          priceAmerican?: number;
+          line?: number;
+          active: boolean;
+        }>;
+      }>;
+    }>;
   }>;
 };
 
@@ -378,11 +382,10 @@ class NhlWebApiProvider implements NhlDataProvider {
     return Array.from(new Map(Array.from(teamCache.values()).map((team) => [team.id, team])).values());
   }
 
-  private async getOddsPapiFixtures(): Promise<OddsPapiFixture[]> {
+  private async getOddsPapiFixtures(): Promise<any[]> {
     try {
       console.log("=== OddsPapi Integration Debug ===");
       console.log("API Key configured:", !!ODDSPAPI_API_KEY);
-      console.log("API Key:", ODDSPAPI_API_KEY ? ODDSPAPI_API_KEY.substring(0, 8) + "..." : "none");
       
       // Use cached fixtures if available to avoid rate limiting
       if (fixturesCache && fixturesCache.expiresAt > Date.now()) {
@@ -390,48 +393,54 @@ class NhlWebApiProvider implements NhlDataProvider {
         return fixturesCache.data;
       }
       
-      // Try fixtures endpoint for current/upcoming games with odds
-      console.log("Trying fixtures endpoint for current hockey games with odds...");
+      // Get date range for fixtures (yesterday to tomorrow to include live games)
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      const from = yesterday.toISOString().split('T')[0];
+      const to = tomorrow.toISOString().split('T')[0];
+      
+      console.log(`Fetching NHL fixtures from ${from} to ${to}...`);
+      
+      // Get NHL fixtures with odds (tournamentId=234 is NHL)
       const fixtures = await this.fetchOddsPapiJson<any>(
-        `fixtures?sportId=15&hasOdds=true`
+        `fixtures?sportId=15&tournamentId=234&from=${from}&to=${to}`
       );
+      
       console.log(`OddsPapi fixtures response type:`, typeof fixtures);
       console.log(`OddsPapi fixtures is array:`, Array.isArray(fixtures));
       console.log(`OddsPapi fixtures length:`, Array.isArray(fixtures) ? fixtures.length : 'N/A');
-      console.log(`OddsPapi fixtures response:`, JSON.stringify(fixtures).substring(0, 800));
       
       if (!Array.isArray(fixtures) || fixtures.length === 0) {
-        console.log("No fixtures with odds returned, trying all fixtures...");
-        const allFixtures = await this.fetchOddsPapiJson<any>(
-          `fixtures?sportId=15`
-        );
-        console.log(`All fixtures response:`, JSON.stringify(allFixtures).substring(0, 400));
-        fixturesCache = { expiresAt: Date.now() + 300_000, data: [] }; // Cache empty result
+        console.log("No fixtures returned");
+        fixturesCache = { expiresAt: Date.now() + 300_000, data: [] };
         return [];
       }
       
-      // Filter for current/upcoming games (not finished)
-      const currentFixtures = fixtures.filter((f: any) => f.statusId !== 2); // statusId 2 = finished
-      console.log(`Filtered to ${currentFixtures.length} current/upcoming fixtures`);
+      // Filter for fixtures with odds and not finished
+      const fixturesWithOdds = fixtures.filter((f: any) => f.hasOdds && f.statusId !== 2);
+      console.log(`Filtered to ${fixturesWithOdds.length} fixtures with odds (not finished)`);
       
-      if (currentFixtures.length === 0) {
+      if (fixturesWithOdds.length === 0) {
         console.log("No current fixtures with odds available");
-        fixturesCache = { expiresAt: Date.now() + 300_000, data: [] }; // Cache empty result
+        fixturesCache = { expiresAt: Date.now() + 300_000, data: [] };
         return [];
       }
       
-      // Try to get odds for first few fixtures with rate limiting
-      console.log(`Trying to get odds for first 2 current fixtures...`);
-      const fixturesWithOdds = await Promise.all(
-        currentFixtures.slice(0, 2).map(async (fixture: any) => {
+      // Try to get odds for fixtures with rate limiting (limit to 1 to avoid quota burn)
+      console.log(`Fetching odds for up to 1 fixture...`);
+      const fixturesWithOddsData = await Promise.all(
+        fixturesWithOdds.slice(0, 1).map(async (fixture: any) => {
           try {
             await new Promise(resolve => setTimeout(resolve, 2000)); // Rate limit protection
-            const fixtureId = fixture.fixtureId || fixture.id; // Handle both field names
-            console.log(`Fetching odds for fixture ${fixtureId}...`);
+            const fixtureId = fixture.fixtureId;
+            console.log(`Fetching odds for fixture ${fixtureId} (${fixture.participant1Name} vs ${fixture.participant2Name})...`);
             const fixtureOdds = await this.fetchOddsPapiJson<any>(
               `odds?fixtureId=${fixtureId}`
             );
-            console.log(`Odds for fixture ${fixtureId}:`, JSON.stringify(fixtureOdds).substring(0, 400));
             return { ...fixture, odds: fixtureOdds };
           } catch (error) {
             console.log(`Failed to get odds for fixture:`, error instanceof Error ? error.message : String(error));
@@ -440,9 +449,9 @@ class NhlWebApiProvider implements NhlDataProvider {
         })
       );
       
-      console.log(`Returning ${fixturesWithOdds.length} fixtures with odds data`);
-      fixturesCache = { expiresAt: Date.now() + 300_000, data: fixturesWithOdds }; // Cache result
-      return fixturesWithOdds;
+      console.log(`Returning ${fixturesWithOddsData.length} fixtures with odds data`);
+      fixturesCache = { expiresAt: Date.now() + 300_000, data: fixturesWithOddsData };
+      return fixturesWithOddsData;
     } catch (error) {
       console.error("Failed to fetch OddsPapi fixtures:", error);
       console.error("Error details:", error instanceof Error ? error.message : String(error));
@@ -456,10 +465,17 @@ class NhlWebApiProvider implements NhlDataProvider {
   }
 
   private extractPlayerPropsFromBookmakerOdds(bookmakerOdds: any, playerProps: any[]) {
+    // Only extract from DraftKings and a few major sportsbooks to save quota
+    const priorityBookmakers = ['draftkings', 'fanduel', 'betmgm', 'caesars', 'pointsbet', 'bet365'];
+    
     for (const [bookmakerName, bookmakerData] of Object.entries(bookmakerOdds)) {
+      // Skip if not a priority bookmaker
+      if (!priorityBookmakers.some(b => bookmakerName.toLowerCase().includes(b))) {
+        continue;
+      }
+      
       const bookmaker = bookmakerData as any;
       if (!bookmaker.markets) {
-        console.log(`No markets for bookmaker ${bookmakerName}`);
         continue;
       }
 
@@ -468,39 +484,43 @@ class NhlWebApiProvider implements NhlDataProvider {
       for (const [marketId, marketData] of Object.entries(bookmaker.markets)) {
         const market = marketData as any;
         if (!market.outcomes) {
-          console.log(`No outcomes for market ${marketId}`);
           continue;
         }
-
-        console.log(`Market ${marketId} has ${Object.keys(market.outcomes).length} outcomes`);
 
         // Look for player props (markets with playerName in outcomes)
         for (const [outcomeId, outcomeData] of Object.entries(market.outcomes)) {
           const outcome = outcomeData as any;
           if (!outcome.players) {
-            console.log(`No players for outcome ${outcomeId}`);
             continue;
           }
 
-          console.log(`Outcome ${outcomeId} has ${Object.keys(outcome.players).length} players`);
-
           for (const [playerId, playerData] of Object.entries(outcome.players)) {
             const player = playerData as any;
-            console.log(`Player data:`, JSON.stringify(player).substring(0, 200));
             
+            // Only extract if we have player name and price
             if (player.playerName && player.price) {
+              // Use American odds (priceAmerican) as it's more common in sports betting
+              const americanOdds = player.priceAmerican || this.decimalToAmerican(player.price);
+              
               playerProps.push({
                 playerName: player.playerName,
-                market: marketId, // Using marketId as market name for now
-                odds: player.price,
+                market: marketId,
+                odds: americanOdds,
                 bookmaker: bookmakerName,
-                line: player.line,
+                line: player.line || null,
               });
-              console.log(`Added player prop: ${player.playerName} at ${player.price}`);
             }
           }
         }
       }
+    }
+  }
+
+  private decimalToAmerican(decimalOdds: number): number {
+    if (decimalOdds >= 2) {
+      return Math.round((decimalOdds - 1) * 100);
+    } else {
+      return Math.round(-100 / (decimalOdds - 1));
     }
   }
 
@@ -850,6 +870,16 @@ class NhlWebApiProvider implements NhlDataProvider {
       const todayTeamIds = new Set(games.flatMap(g => [g.homeTeam.id, g.awayTeam.id]));
       const relevantPlayers = players.filter(p => todayTeamIds.has(p.team.id));
 
+      // Create a map of canonical player names to odds for faster lookup
+      const canonicalPlayerName = (name: string) =>
+        name.toLowerCase().replace(/[^a-z]/g, "");
+      
+      const oddsMap = new Map<string, { odds: number; line: number | null; bookmaker: string }>();
+      for (const prop of playerPropsOdds) {
+        const propCanonical = canonicalPlayerName(prop.playerName);
+        oddsMap.set(propCanonical, { odds: prop.odds, line: prop.line, bookmaker: prop.bookmaker });
+      }
+
       // Calculate predictions for each player
       const props = await Promise.all(
         relevantPlayers.map(async (player) => {
@@ -872,18 +902,26 @@ class NhlWebApiProvider implements NhlDataProvider {
         const underProbability = 1 - overProbability;
         const modelProjection = seasonGoalsPerGame;
 
-        // Find matching odds for this player
-        const canonicalPlayerName = (name: string) =>
-          name.toLowerCase().replace(/[^a-z]/g, "");
-        
+        // Find matching odds for this player using the map
         const playerCanonical = canonicalPlayerName(player.fullName);
-        const matchingProp = playerPropsOdds.find((prop) =>
-          canonicalPlayerName(prop.playerName).includes(playerCanonical) ||
-          playerCanonical.includes(canonicalPlayerName(prop.playerName))
-        );
+        const playerLastFirst = canonicalPlayerName(`${player.lastName}, ${player.firstName}`);
+        
+        // Try exact match first, then partial matches
+        let matchingOdds = oddsMap.get(playerCanonical) || oddsMap.get(playerLastFirst);
+        
+        // If no exact match, try finding by partial match
+        if (!matchingOdds) {
+          for (const [key, value] of oddsMap.entries()) {
+            if (key.includes(playerCanonical) || key.includes(playerLastFirst) ||
+                playerCanonical.includes(key) || playerLastFirst.includes(key)) {
+              matchingOdds = value;
+              break;
+            }
+          }
+        }
 
-        const odds = matchingProp?.odds ?? null;
-        const line = matchingProp?.line ?? null;
+        const odds = matchingOdds?.odds ?? null;
+        const line = matchingOdds?.line ?? null;
 
         // Calculate edge only if we have real odds from OddsPapi
         let edge = null;
@@ -922,7 +960,7 @@ class NhlWebApiProvider implements NhlDataProvider {
           underProbability,
           edge,
           confidence,
-          source: matchingProp?.bookmaker ?? null,
+          source: matchingOdds?.bookmaker ?? null,
         };
       })
     );
@@ -975,8 +1013,8 @@ class NhlWebApiProvider implements NhlDataProvider {
 
       // Match OddsPapi fixtures to NHL games by team names
       const games = oddsPapiFixtures.flatMap((fixture) => {
-        const away = canonicalTeamName(fixture.awayTeam);
-        const home = canonicalTeamName(fixture.homeTeam);
+        const away = canonicalTeamName(fixture.participant1Name);
+        const home = canonicalTeamName(fixture.participant2Name);
         const game = verifiedGames.find((candidate) =>
           canonicalTeamName(candidate.awayTeam.name) === away &&
           canonicalTeamName(candidate.homeTeam.name) === home
@@ -1040,35 +1078,18 @@ class NhlWebApiProvider implements NhlDataProvider {
       }> = [];
 
       for (const fixture of oddsPapiFixtures) {
-        console.log(`Processing fixture ${fixture.fixtureId || fixture.id}`);
-        console.log(`Full fixture structure:`, JSON.stringify(fixture).substring(0, 500));
+        console.log(`Processing fixture ${fixture.fixtureId} (${fixture.participant1Name} vs ${fixture.participant2Name})`);
         
-        // Handle both bookmakerOdds structure and odds property from fallback
-        const bookmakerOdds = fixture.bookmakerOdds || (fixture.odds?.bookmakerOdds) || fixture.odds;
-        console.log(`Fixture has bookmakerOdds:`, !!bookmakerOdds);
-        console.log(`BookmakerOdds type:`, typeof bookmakerOdds);
+        // Handle the odds structure from the new implementation
+        const bookmakerOdds = fixture.odds?.bookmakerOdds;
         
         if (!bookmakerOdds) {
-          console.log(`No bookmakerOdds for fixture ${fixture.fixtureId || fixture.id}`);
+          console.log(`No bookmakerOdds for fixture ${fixture.fixtureId}`);
           continue;
         }
 
-        console.log(`BookmakerOdds structure:`, JSON.stringify(bookmakerOdds).substring(0, 500));
-
-        // Extract player props - try different possible structures
-        if (Array.isArray(bookmakerOdds)) {
-          console.log(`bookmakerOdds is array with ${bookmakerOdds.length} items`);
-          for (const item of bookmakerOdds) {
-            console.log(`Processing bookmakerOdds array item:`, JSON.stringify(item).substring(0, 300));
-            // Try to extract player props from array structure
-            if (item.bookmakerOdds) {
-              this.extractPlayerPropsFromBookmakerOdds(item.bookmakerOdds, playerProps);
-            }
-          }
-        } else if (typeof bookmakerOdds === 'object') {
-          console.log(`bookmakerOdds is object with keys:`, Object.keys(bookmakerOdds).join(', '));
-          this.extractPlayerPropsFromBookmakerOdds(bookmakerOdds, playerProps);
-        }
+        console.log(`Extracting player props from ${Object.keys(bookmakerOdds).length} bookmakers`);
+        this.extractPlayerPropsFromBookmakerOdds(bookmakerOdds, playerProps);
       }
 
       console.log(`=== Final count: Extracted ${playerProps.length} player props from OddsPapi ===`);
@@ -1085,10 +1106,22 @@ class NhlWebApiProvider implements NhlDataProvider {
       const props = await this.getProps();
       // Return top props as snipes (any with edge > 0)
       const snipes = props.filter(p => p.edge !== null && p.edge > 0).slice(0, 10);
+      
+      // Map props to snipes schema format
+      const snipesMapped = snipes.map(p => ({
+        ...p,
+        score: p.modelProjection || 0,
+        goalProbability: p.overProbability || 0,
+        sogProjection: null,
+        pointProbability: null,
+        assistProbability: null,
+        factors: []
+      }));
+      
       try {
-        return GetSnipesResponse.parse(snipes);
+        return GetSnipesResponse.parse(snipesMapped);
       } catch (error) {
-        console.error("Failed to parse snipes response:", error);
+        console.error("Failed to parse snipes response - schema mismatch, returning empty array:", error);
         return GetSnipesResponse.parse([]);
       }
     } catch (error) {
