@@ -430,10 +430,10 @@ class NhlWebApiProvider implements NhlDataProvider {
         return [];
       }
       
-      // Try to get odds for fixtures with rate limiting (limit to 1 to avoid quota burn)
-      console.log(`Fetching odds for up to 1 fixture...`);
+      // Try to get odds for fixtures with rate limiting (limit to 5 to cover more games)
+      console.log(`Fetching odds for up to 5 fixtures...`);
       const fixturesWithOddsData = await Promise.all(
-        fixturesWithOdds.slice(0, 1).map(async (fixture: any) => {
+        fixturesWithOdds.slice(0, 5).map(async (fixture: any) => {
           try {
             await new Promise(resolve => setTimeout(resolve, 2000)); // Rate limit protection
             const fixtureId = fixture.fixtureId;
@@ -1208,7 +1208,7 @@ class NhlWebApiProvider implements NhlDataProvider {
         this.getPlayers(),
         this.getSnipes()
       ]);
-      const topConfidence = snipes.length > 0 ? snipes[0] : null;
+      const topConfidence = snipes.length > 0 ? snipes[0]?.player?.fullName || null : null;
       try {
         return GetDashboardSummaryResponse.parse({
           dataStatus: {
