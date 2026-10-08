@@ -1133,17 +1133,19 @@ class NhlWebApiProvider implements NhlDataProvider {
   async getAudit() {
     try {
       const props = await this.getProps();
-      // Generate some audit records from props
+      // Generate audit records from props with proper schema
       const auditRecords = props.slice(0, 20).map(p => ({
         id: `${p.id}-${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        player: p.player.fullName,
+        createdAt: new Date(),
+        playerName: p.player.fullName,
         market: p.market,
         line: p.line,
+        projection: p.modelProjection,
+        probability: p.overProbability,
         confidence: p.confidence,
-        edge: p.edge,
-        result: null,
-        settled: false
+        modelVersion: "data-only",
+        actual: null,
+        result: 'pending' as const
       }));
       try {
         return GetAuditResponse.parse(auditRecords);
