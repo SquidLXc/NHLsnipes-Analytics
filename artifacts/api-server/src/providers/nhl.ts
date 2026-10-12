@@ -165,55 +165,6 @@ type RawPlayer = {
 };
 type NormalizedTeam = z.infer<typeof GetTeamsResponse>[number];
 
-// OddsPapi types
-type OddsPapiFixture = {
-  fixtureId: string;
-  participant1Id: number;
-  participant2Id: number;
-  sportId: number;
-  tournamentId: number;
-  seasonId: number;
-  statusId: number;
-  hasOdds: boolean;
-  startTime: string;
-  participant1Name: string;
-  participant1ShortName: string;
-  participant1Abbr: string;
-  participant2Name: string;
-  participant2ShortName: string;
-  participant2Abbr: string;
-  sportName: string;
-  tournamentName: string;
-  odds?: {
-    bookmakerOdds: any;
-  };
-};
-
-type OddsPapiMarket = {
-  marketId: number;
-  marketName: string;
-  playerProp: boolean;
-};
-
-type OddsPapiOddsResponse = {
-  fixtureId: string;
-  bookmakerOdds: Record<string, {
-    bookmakerIsActive: boolean;
-    markets: Record<string, {
-      marketActive: boolean;
-      outcomes: Record<string, {
-        players: Record<string, {
-          playerName?: string;
-          price?: number;
-          priceAmerican?: number;
-          line?: number;
-          active: boolean;
-        }>;
-      }>;
-    }>;
-  }>;
-};
-
 const NHL_API_BASE_URL =
   process.env.NHLSNIPES_NHL_API_BASE_URL?.replace(/\/$/, "") ||
   "https://api-web.nhle.com/v1";
@@ -223,8 +174,18 @@ const NHL_SEASON_START_DATE =
   process.env.NHLSNIPES_SEASON_START_DATE || "2026-09-29";
 const INCLUDE_PRESEASON =
   process.env.NHLSNIPES_INCLUDE_PRESEASON !== "false";
-const ODDSPAPI_API_KEY = process.env.ODDSPAPI_API_KEY;
-const ODDSPAPI_BASE_URL = "https://api.oddspapi.io/v4";
+const THERUNDOWN_API_KEY = process.env.THERUNDOWN_API_KEY;
+const THERUNDOWN_BASE_URL = "https://therundown.io/api/v2";
+const NHL_SPORT_ID = 6;
+// Let the API return available markets rather than hardcoding sport-specific prop IDs
+// TheRundown documentation states each sport has its own set of prop markets
+const NHL_CORE_MARKET_IDS = "1,2,3,563"; // Moneyline, spread, total, 3-way regulation
+const PRIORITY_AFFILIATE_IDS = "19,23,22,3"; // DraftKings, FanDuel, BetMGM, Pinnacle
+
+// Parlay API configuration for player props
+const PARLAY_API_KEY = process.env.PARLAY_API_KEY;
+const PARLAY_BASE_URL = "https://parlay-api.com/v1";
+const PARLAY_NHL_SPORT_KEY = "icehockey_nhl";
 const syncHealth: DataHealth = {
   provider: "NHL Web API",
   connection: "connected",
@@ -242,9 +203,10 @@ const teamCache = new Map<string, ProviderData["teams"][number]>();
 let playersCache: ProviderData["players"] | null = null;
 let playersCacheAt = 0;
 let oddsCache: { expiresAt: number; data: ProviderData["odds"] } | null = null;
-let tournamentsCache: { expiresAt: number; data: any } | null = null;
-let fixturesCache: { expiresAt: number; data: any } | null = null;
-let fixturesPromise: Promise<any> | null = null; // Deduplication for concurrent requests
+let therundownEventsCache: { expiresAt: number; data: any } | null = null;
+let therundownEventsPromise: Promise<any> | null = null; // Deduplication for concurrent requests
+let parlayPropsCache: { expiresAt: number; data: any } | null = null;
+let parlayPropsPromise: Promise<any> | null = null; // Deduplication for concurrent requests
 
 function text(value: string | undefined, fallback: string) {
   return value?.trim() || fallback;
@@ -252,6 +214,34 @@ function text(value: string | undefined, fallback: string) {
 
 function canonicalTeamName(value: string) {
   return value.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/[^a-z0-9]/g, "");
+}
+
+// Map TheRundown team names/abbreviations to NHL team abbreviations
+const therundownTeamMapping: Record<string, string> = {
+  "florida": "FLA",
+  "fla": "FLA",
+  "buffalo": "BUF",
+  "buf": "BUF",
+  "ottawa": "OTT",
+  "ott": "OTT",
+  "newjersey": "NJD",
+  "nj": "NJD",
+  "vegas": "VGK",
+  "las": "VGK",
+  "minnesota": "MIN",
+  "min": "MIN",
+};
+
+function mapTheRundownTeamToNHL(theRundownName: string, theRundownAbbr: string): string {
+  const canonical = canonicalTeamName(theRundownName);
+  const abbrLower = theRundownAbbr.toLowerCase();
+
+  // Check mapping first
+  if (therundownTeamMapping[canonical]) return therundownTeamMapping[canonical];
+  if (therundownTeamMapping[abbrLower]) return therundownTeamMapping[abbrLower];
+
+  // Return abbreviation as-is if no mapping
+  return theRundownAbbr.toUpperCase();
 }
 
 function assetUrl(value?: string) {
@@ -313,6 +303,141 @@ function teamFromRaw(raw: RawTeam, fallbackId?: string): NormalizedTeam {
   return team;
 }
 
+// Parlay API helper
+async function fetchParlayJson<T>(path: string, params?: Record<string, string>): Promise<T> {
+  if (!PARLAY_API_KEY) {
+    throw new Error("PARLAY_API_KEY not configured");
+  }
+
+  const url = new URL(`${PARLAY_BASE_URL}${path}`, PARLAY_BASE_URL);
+  url.searchParams.append("apiKey", PARLAY_API_KEY);
+
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      url.searchParams.append(key, value);
+    }
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30_000);
+
+  try {
+    const response = await fetch(url.toString(), {
+      signal: controller.signal,
+      headers: {
+        "Accept": "application/json",
+      },
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Parlay API returned HTTP ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data as T;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("Parlay API request timeout");
+    }
+    throw error;
+  }
+}
+
+// TheRundown API types
+type TheRundownEvent = {
+  event_id: string;
+  sport_id: number;
+  event_date: string;
+  teams: Array<{
+    id: number;
+    name: string;
+    abbreviation: string;
+  }>;
+  score?: {
+    event_status: string;
+    event_status_detail: string;
+    away_score: number;
+    home_score: number;
+  };
+  markets: Array<{
+    market_id: number;
+    name: string;
+    participants: Array<{
+      id: number;
+      type: string;
+      name: string;
+      lines: Array<{
+        value: string;
+        prices: Record<string, {
+          price: number;
+          updated_at: string;
+        }>;
+      }>;
+    }>;
+  }>;
+};
+
+// Parlay API types
+type ParlayProp = {
+  event_id: string;
+  canonical_event_id: string;
+  sport_key: string;
+  game_date: string;
+  commence_time: string;
+  home_team: string;
+  away_team: string;
+  bookmaker: string;
+  bookmaker_title: string;
+  player: string;
+  market_key: string;
+  market: string;
+  period: string;
+  line: number;
+  over_price: number | null;
+  under_price: number | null;
+  implied_probability: number | null;
+  last_update: string;
+};
+
+type TheRundownResponse = {
+  events: TheRundownEvent[];
+  meta?: {
+    delta_last_id?: number;
+  };
+};
+
+async function fetchTheRundownJson<T>(path: string, params?: Record<string, string>): Promise<T> {
+  if (!THERUNDOWN_API_KEY) throw new Error("TheRundown API key not configured");
+  const url = new URL(`${THERUNDOWN_BASE_URL}/${path.replace(/^\//, "")}`);
+  if (params) {
+    Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
+  }
+  const response = await fetch(url, {
+    headers: { "X-TheRundown-Key": THERUNDOWN_API_KEY, accept: "application/json" },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (response.status === 401 || response.status === 403) {
+    throw new Error("TheRundown authentication failed - check API key");
+  }
+  if (response.status === 429) {
+    throw new Error("TheRundown rate limit exceeded");
+  }
+  if (!response.ok) {
+    console.error(`TheRundown returned HTTP ${response.status} for ${path}`);
+    throw new Error(`TheRundown returned HTTP ${response.status} for ${path}`);
+  }
+  try {
+    return (await response.json()) as T;
+  } catch (error) {
+    console.error(`Failed to parse TheRundown JSON response for ${path}:`, error);
+    throw error;
+  }
+}
+
 function gameFromRaw(raw: RawGame) {
   const awayTeam = teamFromRaw(raw.awayTeam);
   const homeTeam = teamFromRaw(raw.homeTeam);
@@ -351,29 +476,141 @@ class NhlWebApiProvider implements NhlDataProvider {
     return (await response.json()) as T;
   }
 
-  private async fetchOddsPapiJson<T>(path: string): Promise<T> {
-    if (!ODDSPAPI_API_KEY) throw new Error("OddsPapi API key not configured");
-    const url = new URL(`${ODDSPAPI_BASE_URL}/${path.replace(/^\//, "")}`);
-    url.searchParams.set("apiKey", ODDSPAPI_API_KEY);
-    const response = await fetch(url, {
-      headers: { accept: "application/json" },
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (response.status === 401 || response.status === 403) {
-      throw new Error("OddsPapi authentication failed - check API key");
-    }
-    if (response.status === 429) {
-      throw new Error("OddsPapi rate limit exceeded");
-    }
-    if (!response.ok) {
-      console.error(`OddsPapi returned HTTP ${response.status} for ${path}`);
-      throw new Error(`OddsPapi returned HTTP ${response.status} for ${path}`);
-    }
+  private async getTheRundownEvents(includePlayerProps: boolean = true): Promise<TheRundownEvent[]> {
     try {
-      return (await response.json()) as T;
+      // Use cached events if available to avoid rate limiting
+      if (therundownEventsCache && therundownEventsCache.expiresAt > Date.now()) {
+        console.log("Using cached TheRundown events");
+        return therundownEventsCache.data;
+      }
+
+      // If a request is already in progress, wait for it
+      if (therundownEventsPromise) {
+        console.log("Waiting for in-progress TheRundown events request");
+        return therundownEventsPromise;
+      }
+
+      // If cache exists but is expired, log it
+      if (therundownEventsCache) {
+        console.log("Cache expired, fetching fresh TheRundown events");
+      }
+
+      // Start the fetch and store the promise for deduplication
+      therundownEventsPromise = (async () => {
+        try {
+          // Get date range for events (yesterday to tomorrow to include live games)
+          const today = new Date();
+          const yesterday = new Date(today);
+          yesterday.setDate(yesterday.getDate() - 1);
+          const tomorrow = new Date(today);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+
+          const date = today.toISOString().split('T')[0];
+
+          console.log(`Fetching NHL events from TheRundown for ${date}...`);
+
+          // Note: Player props require Starter plan or higher ($49/mo)
+          // Free tier only gets core markets (moneyline, spread, total)
+          const marketIds = NHL_CORE_MARKET_IDS;
+
+          const response = await fetchTheRundownJson<TheRundownResponse>(
+            `sports/${NHL_SPORT_ID}/events/${date}`,
+            {
+              market_ids: marketIds,
+              affiliate_ids: PRIORITY_AFFILIATE_IDS,
+              main_line: "true",
+              offset: "300", // Align with US Central Time
+            }
+          );
+
+          if (!response.events || response.events.length === 0) {
+            console.log("No TheRundown events returned");
+            therundownEventsCache = { expiresAt: Date.now() + 600_000, data: [] };
+            return [];
+          }
+
+          console.log(`Fetched ${response.events.length} NHL events from TheRundown`);
+          therundownEventsCache = { expiresAt: Date.now() + 600_000, data: response.events }; // 10 minute cache
+          return response.events;
+        } catch (error) {
+          console.error("Failed to fetch TheRundown events:", error);
+
+          // If rate limited and we have cached data, return it
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (errorMessage.includes('rate limit') && therundownEventsCache && therundownEventsCache.data.length > 0) {
+            console.log("Rate limit hit on TheRundown endpoint, returning cached data");
+            return therundownEventsCache.data;
+          }
+
+          return [];
+        } finally {
+          // Clear the promise after completion
+          therundownEventsPromise = null;
+        }
+      })();
+
+      return therundownEventsPromise;
     } catch (error) {
-      console.error(`Failed to parse OddsPapi JSON response for ${path}:`, error);
-      throw error;
+      console.error("getTheRundownEvents error:", error);
+      return [];
+    }
+  }
+
+  private async getParlayPlayerProps(): Promise<ParlayProp[]> {
+    try {
+      // Use cached props if available to avoid rate limiting
+      if (parlayPropsCache && parlayPropsCache.expiresAt > Date.now()) {
+        return parlayPropsCache.data;
+      }
+
+      // If a request is already in progress, wait for it
+      if (parlayPropsPromise) {
+        return parlayPropsPromise;
+      }
+
+      // Start the fetch and store the promise for deduplication
+      parlayPropsPromise = (async () => {
+        try {
+          console.log("Fetching NHL player props from Parlay API...");
+
+          const response = await fetchParlayJson<ParlayProp[]>(
+            `/sports/${PARLAY_NHL_SPORT_KEY}/props`,
+            {
+              bookmakers: "draftkings,fanduel,betmgm", // Priority sportsbooks
+              limit: "10000", // Get all available props
+            }
+          );
+
+          if (!response || response.length === 0) {
+            console.log("No Parlay props returned");
+            parlayPropsCache = { expiresAt: Date.now() + 600_000, data: [] };
+            return [];
+          }
+
+          console.log(`Fetched ${response.length} NHL player props from Parlay API`);
+          parlayPropsCache = { expiresAt: Date.now() + 600_000, data: response }; // 10 minute cache
+          return response;
+        } catch (error) {
+          console.error("Failed to fetch Parlay props:", error);
+
+          // If rate limited and we have cached data, return it
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (errorMessage.includes('rate limit') && parlayPropsCache && parlayPropsCache.data.length > 0) {
+            console.log("Rate limit hit on Parlay endpoint, returning cached data");
+            return parlayPropsCache.data;
+          }
+
+          return [];
+        } finally {
+          // Clear the promise after completion
+          parlayPropsPromise = null;
+        }
+      })();
+
+      return parlayPropsPromise;
+    } catch (error) {
+      console.error("getParlayPlayerProps error:", error);
+      return [];
     }
   }
 
@@ -381,192 +618,6 @@ class NhlWebApiProvider implements NhlDataProvider {
     const raw = await this.fetchJson<{ standings?: RawTeam[] }>("standings/now");
     for (const standing of raw.standings ?? []) teamFromRaw(standing);
     return Array.from(new Map(Array.from(teamCache.values()).map((team) => [team.id, team])).values());
-  }
-
-  private async getOddsPapiFixtures(): Promise<any[]> {
-    try {
-      // Use cached fixtures if available to avoid rate limiting
-      if (fixturesCache && fixturesCache.expiresAt > Date.now()) {
-        console.log("Using cached fixtures");
-        return fixturesCache.data;
-      }
-      
-      // If a request is already in progress, wait for it
-      if (fixturesPromise) {
-        console.log("Waiting for in-progress fixtures request");
-        return fixturesPromise;
-      }
-      
-      // If cache exists but is expired, log it
-      if (fixturesCache) {
-        console.log("Cache expired, fetching fresh fixtures");
-      }
-      
-      // Start the fetch and store the promise for deduplication
-      fixturesPromise = (async () => {
-        try {
-          // Get date range for fixtures (yesterday to tomorrow to include live games)
-          const today = new Date();
-          const yesterday = new Date(today);
-          yesterday.setDate(yesterday.getDate() - 1);
-          const tomorrow = new Date(today);
-          tomorrow.setDate(tomorrow.getDate() + 1);
-          
-          const from = yesterday.toISOString().split('T')[0];
-          const to = tomorrow.toISOString().split('T')[0];
-          
-          console.log(`Fetching NHL fixtures from ${from} to ${to}...`);
-          
-          // Get NHL fixtures with odds (tournamentId=234 is NHL)
-          const fixtures = await this.fetchOddsPapiJson<any>(
-            `fixtures?sportId=15&tournamentId=234&from=${from}&to=${to}`
-          );
-          
-          if (!Array.isArray(fixtures) || fixtures.length === 0) {
-            console.log("No fixtures returned");
-            fixturesCache = { expiresAt: Date.now() + 600_000, data: [] };
-            return [];
-          }
-          
-          // Filter for fixtures with odds and not finished
-          const fixturesWithOdds = fixtures.filter((f: any) => f.hasOdds && f.statusId !== 2);
-          console.log(`Filtered to ${fixturesWithOdds.length} fixtures with odds (not finished)`);
-          
-          if (fixturesWithOdds.length === 0) {
-            console.log("No current fixtures with odds available");
-            fixturesCache = { expiresAt: Date.now() + 600_000, data: [] };
-            return [];
-          }
-          
-          // Try to get odds for fixtures sequentially to avoid rate limiting (limit to 2 to be safer on quota)
-          console.log(`Fetching odds for up to 2 fixtures sequentially...`);
-          const fixturesWithOddsData: any[] = [];
-          for (const fixture of fixturesWithOdds.slice(0, 2)) {
-            try {
-              await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay between requests
-              const fixtureId = fixture.fixtureId;
-              console.log(`Fetching odds for fixture ${fixtureId} (${fixture.participant1Name} vs ${fixture.participant2Name})...`);
-              const fixtureOdds = await this.fetchOddsPapiJson<any>(
-                `odds?fixtureId=${fixtureId}`
-              );
-              
-              // Check if fixtureOdds has bookmakerOdds
-              const hasOdds = fixtureOdds?.bookmakerOdds && Object.keys(fixtureOdds.bookmakerOdds).length > 0;
-              console.log(`Fixture ${fixtureId} odds result:`, hasOdds ? `SUCCESS - ${Object.keys(fixtureOdds.bookmakerOdds).length} bookmakers` : 'NO ODDS DATA');
-              
-              fixturesWithOddsData.push({ ...fixture, odds: fixtureOdds });
-            } catch (error) {
-              const errorMessage = error instanceof Error ? error.message : String(error);
-              console.log(`Failed to get odds for fixture:`, errorMessage);
-              
-              // If rate limited, try to return cached data if available
-              if (errorMessage.includes('rate limit') && fixturesCache) {
-                console.log("Rate limit hit, returning cached fixtures instead");
-                return fixturesCache.data;
-              }
-              
-              fixturesWithOddsData.push({ ...fixture, odds: null });
-            }
-          }
-          
-          console.log(`Returning ${fixturesWithOddsData.length} fixtures with odds data`);
-          fixturesCache = { expiresAt: Date.now() + 600_000, data: fixturesWithOddsData }; // 10 minute cache
-          return fixturesWithOddsData;
-        } catch (error) {
-          console.error("Failed to fetch OddsPapi fixtures:", error);
-          
-          // If rate limited and we have cached data, return it
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          if (errorMessage.includes('rate limit') && fixturesCache && fixturesCache.data.length > 0) {
-            console.log("Rate limit hit on fixtures endpoint, returning cached data");
-            return fixturesCache.data;
-          }
-          
-          return [];
-        } finally {
-          // Clear the promise after completion
-          fixturesPromise = null;
-        }
-      })();
-      
-      return fixturesPromise;
-    } catch (error) {
-      console.error("getOddsPapiFixtures error:", error);
-      return [];
-    }
-  }
-
-  private async getOddsPapiMarkets(): Promise<OddsPapiMarket[]> {
-    // No longer needed with the new odds-by-tournaments approach
-    return [];
-  }
-
-  private extractPlayerPropsFromBookmakerOdds(bookmakerOdds: any, playerProps: any[]) {
-    // Only extract from DraftKings and a few major sportsbooks to save quota
-    const priorityBookmakers = ['draftkings', 'fanduel', 'betmgm', 'caesars', 'pointsbet', 'bet365'];
-    
-    let totalExtracted = 0;
-    
-    for (const [bookmakerName, bookmakerData] of Object.entries(bookmakerOdds)) {
-      // Skip if not a priority bookmaker
-      if (!priorityBookmakers.some(b => bookmakerName.toLowerCase().includes(b))) {
-        continue;
-      }
-      
-      const bookmaker = bookmakerData as any;
-      if (!bookmaker.markets) {
-        continue;
-      }
-
-      for (const [marketId, marketData] of Object.entries(bookmaker.markets)) {
-        const market = marketData as any;
-        if (!market.outcomes) {
-          continue;
-        }
-
-        // Look for player props (markets with playerName in outcomes)
-        for (const [outcomeId, outcomeData] of Object.entries(market.outcomes)) {
-          const outcome = outcomeData as any;
-          if (!outcome.players) {
-            continue;
-          }
-
-          for (const [playerId, playerData] of Object.entries(outcome.players)) {
-            const player = playerData as any;
-            
-            // Only extract if we have player name and price
-            if (player.playerName && player.price) {
-              // Use American odds (priceAmerican) as it's more common in sports betting
-              const americanOdds = player.priceAmerican || this.decimalToAmerican(player.price);
-              
-              playerProps.push({
-                playerName: player.playerName,
-                market: marketId,
-                odds: americanOdds,
-                bookmaker: bookmakerName,
-                line: player.line || null,
-              });
-              totalExtracted++;
-            }
-          }
-        }
-      }
-    }
-    
-    console.log(`Extracted ${totalExtracted} props from ${Object.keys(bookmakerOdds).length} bookmakers`);
-  }
-
-  private decimalToAmerican(decimalOdds: number): number {
-    if (decimalOdds >= 2) {
-      return Math.round((decimalOdds - 1) * 100);
-    } else {
-      return Math.round(-100 / (decimalOdds - 1));
-    }
-  }
-
-  private async getOddsPapiOdds(fixtureId: number): Promise<OddsPapiOddsResponse | null> {
-    // No longer needed with the new odds-by-tournaments approach
-    return null;
   }
 
   private async loadPlayers() {
@@ -919,21 +970,21 @@ class NhlWebApiProvider implements NhlDataProvider {
       const oddsMap = new Map<string, { odds: number; line: number | null; bookmaker: string }>();
       for (const prop of playerPropsOdds) {
         const propCanonical = canonicalPlayerName(prop.playerName);
-        oddsMap.set(propCanonical, { odds: prop.odds, line: prop.line, bookmaker: prop.bookmaker });
-        
+        oddsMap.set(propCanonical, { odds: prop.odds, line: prop.line ?? null, bookmaker: prop.bookmaker });
+
         // Also store variations for better matching
         // If name has comma, it's "Last, First" format, add "First Last" variant
         if (prop.playerName.includes(',')) {
           const parts = prop.playerName.split(',').map(p => p.trim());
           if (parts.length === 2) {
             const firstLast = canonicalPlayerName(`${parts[1]} ${parts[0]}`);
-            oddsMap.set(firstLast, { odds: prop.odds, line: prop.line, bookmaker: prop.bookmaker });
+            oddsMap.set(firstLast, { odds: prop.odds, line: prop.line ?? null, bookmaker: prop.bookmaker });
           }
         }
       }
-      
+
       // Debug: log sample odds
-      console.log(`=== OddsPapi Player Props Debug ===`);
+      console.log(`=== TheRundown Player Props Debug ===`);
       console.log(`Total odds entries: ${oddsMap.size}`);
       console.log(`Sample odds:`, Array.from(oddsMap.entries()).slice(0, 5).map(([k, v]) => `${k} -> ${v.bookmaker} @ ${v.odds}`));
 
@@ -944,8 +995,8 @@ class NhlWebApiProvider implements NhlDataProvider {
           if (!opponent) return null;
 
           // Skip detailed player stats to avoid timeouts
-          // Use basic season stats from player object
-          const seasonStats = player.seasonStats || { games: 1, goals: 0, sog: 0, points: 0, assists: 0 };
+          // Use default season stats since player object doesn't have them directly
+          const seasonStats = { games: 1, goals: 0, sog: 0, points: 0, assists: 0 };
           const seasonGames = seasonStats.games || 1;
 
           const seasonGoalsPerGame = seasonStats.goals / seasonGames;
@@ -985,7 +1036,7 @@ class NhlWebApiProvider implements NhlDataProvider {
         const odds = matchingOdds?.odds ?? null;
         const line = matchingOdds?.line ?? null;
 
-        // Calculate edge only if we have real odds from OddsPapi
+        // Calculate edge only if we have real odds from TheRundown
         let edge = null;
         if (odds !== null) {
           // Convert American odds to implied probability
@@ -1065,44 +1116,131 @@ class NhlWebApiProvider implements NhlDataProvider {
   }
 
   async getOdds() {
-    if (!ODDSPAPI_API_KEY) {
-      console.warn("ODDSPAPI_API_KEY not configured, returning unconfigured odds response");
-      return GetOddsResponse.parse({ provider: "OddsPapi", configured: false, lastUpdated: null, games: [] });
+    if (!THERUNDOWN_API_KEY) {
+      console.warn("THERUNDOWN_API_KEY not configured, returning unconfigured odds response");
+      return GetOddsResponse.parse({ provider: "TheRundown", configured: false, lastUpdated: null, games: [] });
     }
     if (oddsCache && oddsCache.expiresAt > Date.now()) return oddsCache.data;
 
     try {
-      const [oddsPapiFixtures, currentGames, futureGames] = await Promise.all([
-        this.getOddsPapiFixtures(),
+      const today = new Date().toISOString().slice(0, 10);
+      const [therundownEvents, currentGames, futureGames, todayGames] = await Promise.all([
+        this.getTheRundownEvents(false), // false = only core markets, not player props
         this.getGames(),
         this.getFutureGames(),
+        this.getGames(today), // Today's games to match TheRundown events
       ]);
-      const verifiedGames = [...currentGames, ...futureGames];
+      const verifiedGames = [...currentGames, ...futureGames, ...todayGames];
 
-      // Match OddsPapi fixtures to NHL games by team names
-      const games = oddsPapiFixtures.flatMap((fixture) => {
-        const away = canonicalTeamName(fixture.participant1Name);
-        const home = canonicalTeamName(fixture.participant2Name);
+      // Map affiliate IDs to bookmaker names for display
+      const affiliateNames: Record<number, string> = {
+        19: "DraftKings",
+        23: "FanDuel",
+        22: "BetMGM",
+        3: "Pinnacle",
+        32: "Circa Sports",
+        7: "BookMaker",
+        9: "BetCRIS",
+        2: "Bovada",
+        24: "theScore Bet",
+        21: "Unibet",
+        28: "HardRock",
+        33: "Bet105",
+        34: "Heritage Sports",
+        6: "BetOnline",
+        4: "SportsBetting",
+        11: "LowVig",
+        14: "Intertops",
+        16: "Matchbook",
+        18: "YouWager",
+      };
+
+      // Match TheRundown events to NHL games by team names
+      const games = therundownEvents.flatMap((event) => {
+        const awayAbbr = mapTheRundownTeamToNHL(event.teams[0].name, event.teams[0].abbreviation || "");
+        const homeAbbr = mapTheRundownTeamToNHL(event.teams[1].name, event.teams[1].abbreviation || "");
+
+        // Try matching by mapped abbreviation
         const game = verifiedGames.find((candidate) =>
-          canonicalTeamName(candidate.awayTeam.name) === away &&
-          canonicalTeamName(candidate.homeTeam.name) === home
+          candidate.awayTeam.abbreviation === awayAbbr &&
+          candidate.homeTeam.abbreviation === homeAbbr
         );
-        if (!game) return [];
 
-        // Return basic game odds structure (OddsPapi focuses on player props)
+        if (!game) {
+          return [];
+        }
+
+        // Build sportsbooks array from TheRundown markets
+        const sportsbooks = new Map<number, {
+          key: string;
+          title: string;
+          lastUpdate: string;
+          markets: Array<{
+            key: string;
+            name: string;
+            label: string; // Required by schema
+            outcomes: Array<{
+              name: string;
+              price: number;
+              point: number; // Required by schema
+            }>;
+          }>;
+        }>();
+
+        // Process each market
+        for (const market of event.markets) {
+          const marketName = market.name;
+
+          for (const participant of market.participants) {
+            for (const line of participant.lines) {
+              // Extract line value if present (for spreads/totals)
+              const lineValue = line.value ? parseFloat(line.value.replace(/[^\d.-]/g, '')) : null;
+
+              // Process each affiliate (sportsbook)
+              for (const [affiliateId, priceData] of Object.entries(line.prices)) {
+                const affId = parseInt(affiliateId);
+                if (!sportsbooks.has(affId)) {
+                  sportsbooks.set(affId, {
+                    key: affiliateNames[affId] || `affiliate_${affId}`,
+                    title: affiliateNames[affId] || `Affiliate ${affId}`,
+                    lastUpdate: priceData.updated_at,
+                    markets: [],
+                  });
+                }
+
+                const sportsbook = sportsbooks.get(affId)!;
+
+                // Find or create market in this sportsbook
+                let marketObj = sportsbook.markets.find(m => m.key === String(market.market_id));
+                if (!marketObj) {
+                  marketObj = {
+                    key: String(market.market_id),
+                    name: marketName,
+                    label: marketName, // Add required label field
+                    outcomes: [],
+                  };
+                  sportsbook.markets.push(marketObj);
+                }
+
+                // Add outcome with required point field
+                marketObj.outcomes.push({
+                  name: participant.name,
+                  price: priceData.price,
+                  point: lineValue ?? 0, // Default to 0 if no line value
+                });
+              }
+            }
+          }
+        }
+
         return [{
           game,
-          sportsbooks: [{
-            key: "oddspapi",
-            title: "OddsPapi",
-            lastUpdate: new Date().toISOString(),
-            markets: []
-          }]
+          sportsbooks: Array.from(sportsbooks.values()),
         }];
       });
 
       const data = GetOddsResponse.parse({
-        provider: "OddsPapi",
+        provider: "TheRundown",
         configured: true,
         lastUpdated: new Date().toISOString(),
         games
@@ -1110,10 +1248,10 @@ class NhlWebApiProvider implements NhlDataProvider {
       oddsCache = { expiresAt: Date.now() + 60_000, data };
       return data;
     } catch (error) {
-      console.error("OddsPapi odds fetch error:", error);
+      console.error("TheRundown odds fetch error:", error);
       // Return gracefully degraded response instead of throwing
       return GetOddsResponse.parse({
-        provider: "OddsPapi",
+        provider: "TheRundown",
         configured: true,
         lastUpdated: null,
         games: []
@@ -1122,21 +1260,16 @@ class NhlWebApiProvider implements NhlDataProvider {
   }
 
   async getPlayerPropsOdds() {
-    if (!ODDSPAPI_API_KEY) return [];
+    if (!PARLAY_API_KEY) return [];
 
     try {
-      console.log("=== getPlayerPropsOdds Debug ===");
-      
-      // Get OddsPapi fixtures (which now includes odds data)
-      const oddsPapiFixtures = await this.getOddsPapiFixtures();
-      if (!oddsPapiFixtures.length) {
-        console.log("No OddsPapi fixtures returned");
+      // Get player props from Parlay API
+      const parlayProps = await this.getParlayPlayerProps();
+      if (!parlayProps.length) {
         return [];
       }
 
-      console.log(`Processing ${oddsPapiFixtures.length} OddsPapi fixtures with odds`);
-
-      // Extract player props from all fixtures
+      // Convert Parlay props to our internal format
       const playerProps: Array<{
         playerName: string;
         market: string;
@@ -1145,22 +1278,33 @@ class NhlWebApiProvider implements NhlDataProvider {
         line?: number;
       }> = [];
 
-      for (const fixture of oddsPapiFixtures) {
-        // Handle the odds structure from the new implementation
-        const bookmakerOdds = fixture.odds?.bookmakerOdds;
-        
-        if (!bookmakerOdds) {
-          continue;
+      for (const prop of parlayProps) {
+        // Add over price if available
+        if (prop.over_price !== null) {
+          playerProps.push({
+            playerName: prop.player,
+            market: prop.market,
+            odds: prop.over_price,
+            bookmaker: prop.bookmaker_title,
+            line: prop.line,
+          });
         }
 
-        this.extractPlayerPropsFromBookmakerOdds(bookmakerOdds, playerProps);
+        // Add under price if available
+        if (prop.under_price !== null) {
+          playerProps.push({
+            playerName: prop.player,
+            market: prop.market,
+            odds: prop.under_price,
+            bookmaker: prop.bookmaker_title,
+            line: prop.line,
+          });
+        }
       }
 
-      console.log(`=== Final count: Extracted ${playerProps.length} player props from OddsPapi ===`);
       return playerProps;
     } catch (error) {
-      console.error("Error fetching player props from OddsPapi:", error);
-      console.error("Error details:", error instanceof Error ? error.message : String(error));
+      console.error("Error fetching player props from Parlay API:", error);
       return [];
     }
   }
@@ -1242,8 +1386,8 @@ class NhlWebApiProvider implements NhlDataProvider {
             provider: this.name,
             lastUpdated: new Date().toISOString(),
             message: games.length > 0
-              ? `Official NHL schedule, including preseason when available, standings, roster and player data is available. ${ODDSPAPI_API_KEY ? "Sportsbook odds are connected via OddsPapi." : "Sportsbook odds are not configured."} Model feed is not configured.`
-              : `Official NHL data is connected, but no verified games were returned for today's NHL date. ${INCLUDE_PRESEASON ? "Preseason is included when the provider publishes it." : `Preseason is excluded before ${NHL_SEASON_START_DATE}.`} ${ODDSPAPI_API_KEY ? "Sportsbook odds are connected via OddsPapi when markets are posted." : "Sportsbook odds are not configured."} Model feed is not configured.`,
+              ? `Official NHL schedule, including preseason when available, standings, roster and player data is available. ${THERUNDOWN_API_KEY ? "Sportsbook odds are connected via TheRundown." : "Sportsbook odds are not configured."} Model feed is not configured.`
+              : `Official NHL data is connected, but no verified games were returned for today's NHL date. ${INCLUDE_PRESEASON ? "Preseason is included when the provider publishes it." : `Preseason is excluded before ${NHL_SEASON_START_DATE}.`} ${THERUNDOWN_API_KEY ? "Sportsbook odds are connected via TheRundown when markets are posted." : "Sportsbook odds are not configured."} Model feed is not configured.`,
           },
           games: games.length,
           snipes: snipes.length,

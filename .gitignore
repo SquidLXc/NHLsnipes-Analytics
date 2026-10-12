@@ -47,3 +47,7 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Environment files with API keys
+.env
+artifacts/api-server/.env
