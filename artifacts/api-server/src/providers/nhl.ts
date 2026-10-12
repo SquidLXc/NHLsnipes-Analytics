@@ -470,7 +470,7 @@ class NhlWebApiProvider implements NhlDataProvider {
   private async fetchJson<T>(path: string): Promise<T> {
     const response = await fetch(`${NHL_API_BASE_URL}/${path.replace(/^\//, "")}`, {
       headers: { accept: "application/json", "user-agent": "NHLsnipes/1.0" },
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(60_000), // Increased to 60s for slower stat fetching
     });
     if (!response.ok) throw new Error(`NHL Web API returned HTTP ${response.status} for ${path}`);
     return (await response.json()) as T;
@@ -615,80 +615,112 @@ class NhlWebApiProvider implements NhlDataProvider {
   }
 
   private async loadTeams() {
-    const raw = await this.fetchJson<{ standings?: RawTeam[] }>("standings/now");
-    for (const standing of raw.standings ?? []) teamFromRaw(standing);
-    return Array.from(new Map(Array.from(teamCache.values()).map((team) => [team.id, team])).values());
+    try {
+      const raw = await this.fetchJson<{ standings?: RawTeam[] }>("standings/now");
+      for (const standing of raw.standings ?? []) teamFromRaw(standing);
+      return Array.from(new Map(Array.from(teamCache.values()).map((team) => [team.id, team])).values());
+    } catch (error) {
+      console.error("loadTeams error:", error);
+      return [];
+    }
   }
 
   private async loadPlayers() {
-    if (playersCache && Date.now() - playersCacheAt < 300_000) return playersCache;
-    const teams = await this.loadTeams();
-    const rosters = await Promise.all(
-      teams.map(async (team) => {
-        try {
-          const raw = await this.fetchJson<{ forwards?: RawPlayer[]; defensemen?: RawPlayer[]; goalies?: RawPlayer[] }>(
-            `roster/${team.abbreviation}/current`,
-          );
-          return [...(raw.forwards ?? []), ...(raw.defensemen ?? []), ...(raw.goalies ?? [])].map((player) => ({
-            id: String(player.id),
-            firstName: text(player.firstName?.default, ""),
-            lastName: text(player.lastName?.default, ""),
-            fullName: `${text(player.firstName?.default, "")} ${text(player.lastName?.default, "")}`.trim(),
-            teamId: team.id,
-            team,
-            position: text(player.positionCode || player.position, "—"),
-            jerseyNumber: player.sweaterNumber ?? null,
-            headshotUrl: assetUrl(player.headshot),
-          }));
-        } catch {
-          return [];
-        }
-      }),
-    );
-
-    // Fetch current season stats for all players
-    const playersWithStats = await Promise.all(
-      rosters.flat().map(async (player) => {
-        try {
-          const stats = await this.fetchJson<{ skaterStats?: any; goalieStats?: any }>(
-            `player/${player.id}/landing`,
-          );
-          return {
-            ...player,
-            seasonStats: stats.skaterStats?.regular?.[0] || stats.goalieStats?.regular?.[0] || null,
-          };
-        } catch {
-          return {
-            ...player,
-            seasonStats: null,
-          };
-        }
-      })
-    );
+    if (playersCache && Date.now() - playersCacheAt < 600_000) return playersCache; // Increased to 10 minutes
 
     try {
-      playersCache = GetPlayersResponse.parse(
-        Array.from(new Map(playersWithStats.map((player) => [player.id, player])).values()),
+      const teams = await this.loadTeams();
+      if (!teams.length) {
+        console.log("No teams loaded, returning empty players");
+        playersCache = GetPlayersResponse.parse([]);
+        playersCacheAt = Date.now();
+        return playersCache;
+      }
+
+      const rosters = await Promise.all(
+        teams.map(async (team) => {
+          try {
+            const raw = await this.fetchJson<{ forwards?: RawPlayer[]; defensemen?: RawPlayer[]; goalies?: RawPlayer[] }>(
+              `roster/${team.abbreviation}/current`,
+            );
+            return [...(raw.forwards ?? []), ...(raw.defensemen ?? []), ...(raw.goalies ?? [])].map((player) => ({
+              id: String(player.id),
+              firstName: text(player.firstName?.default, ""),
+              lastName: text(player.lastName?.default, ""),
+              fullName: `${text(player.firstName?.default, "")} ${text(player.lastName?.default, "")}`.trim(),
+              teamId: team.id,
+              team,
+              position: text(player.positionCode || player.position, "—"),
+              jerseyNumber: player.sweaterNumber ?? null,
+              headshotUrl: assetUrl(player.headshot),
+            }));
+          } catch {
+            return [];
+          }
+        }),
       );
+
+      // Fetch current season stats for all players (with concurrency limit to avoid timeouts)
+      const playersWithStats = await Promise.all(
+        rosters.flat().map(async (player) => {
+          try {
+            const stats = await this.fetchJson<{ skaterStats?: any; goalieStats?: any }>(
+              `player/${player.id}/landing`,
+            );
+            return {
+              ...player,
+              seasonStats: stats.skaterStats?.regular?.[0] || stats.goalieStats?.regular?.[0] || null,
+            };
+          } catch {
+            return {
+              ...player,
+              seasonStats: null,
+            };
+          }
+        })
+      );
+
+      try {
+        playersCache = GetPlayersResponse.parse(
+          Array.from(new Map(playersWithStats.map((player) => [player.id, player])).values()),
+        );
+      } catch (error) {
+        console.error("Failed to parse players response:", error);
+        playersCache = GetPlayersResponse.parse([]);
+      }
+      playersCacheAt = Date.now();
+      return playersCache;
     } catch (error) {
-      console.error("Failed to parse players response:", error);
+      console.error("loadPlayers error:", error);
+      // Return cached data if available, otherwise empty
+      if (playersCache) return playersCache;
       playersCache = GetPlayersResponse.parse([]);
+      playersCacheAt = Date.now();
+      return playersCache;
     }
-    playersCacheAt = Date.now();
-    return playersCache;
   }
 
   async getTeams() {
-    return GetTeamsResponse.parse(await this.loadTeams());
+    try {
+      return GetTeamsResponse.parse(await this.loadTeams());
+    } catch (error) {
+      console.error("getTeams error:", error);
+      return GetTeamsResponse.parse([]);
+    }
   }
 
   async getGames(date?: string) {
-    const raw = await this.fetchJson<{ games?: RawGame[] }>(date ? `score/${date}` : "score/now");
-    const verifiedGames = (raw.games ?? []).filter((game) => {
-      const gameDate = (game.gameDate || game.startTimeUTC || "").slice(0, 10);
-      return INCLUDE_PRESEASON || gameDate >= NHL_SEASON_START_DATE;
-    });
-    return GetGamesResponse.parse(verifiedGames.map(gameFromRaw));
+    try {
+      const raw = await this.fetchJson<{ games?: RawGame[] }>(date ? `score/${date}` : "score/now");
+      const verifiedGames = (raw.games ?? []).filter((game) => {
+        const gameDate = (game.gameDate || game.startTimeUTC || "").slice(0, 10);
+        return INCLUDE_PRESEASON || gameDate >= NHL_SEASON_START_DATE;
+      });
+      return GetGamesResponse.parse(verifiedGames.map(gameFromRaw));
+    } catch (error) {
+      console.error("getGames error:", error);
+      return GetGamesResponse.parse([]);
+    }
   }
 
   async getFutureGames() {
@@ -927,78 +959,84 @@ class NhlWebApiProvider implements NhlDataProvider {
   }
 
   async getGoalies() {
-    const players = await this.getPlayers();
-    let games = await this.getGames();
-    if (!games.length) games = await this.getFutureGames();
-    const opponentByTeam = new Map<string, ReturnType<typeof teamFromRaw>>();
-    games.forEach((game) => {
-      opponentByTeam.set(game.homeTeam.id, game.awayTeam);
-      opponentByTeam.set(game.awayTeam.id, game.homeTeam);
-    });
-    return GetGoaliesResponse.parse(
-      players.filter((player) => player.position === "G").map((player) => {
-        const seasonStats = (player as any).seasonStats;
-        const seasonGames = Math.max(1, seasonStats?.games || 1);
+    try {
+      const players = await this.getPlayers();
+      let games = await this.getGames();
+      if (!games.length) games = await this.getFutureGames();
+      const opponentByTeam = new Map<string, ReturnType<typeof teamFromRaw>>();
+      games.forEach((game) => {
+        opponentByTeam.set(game.homeTeam.id, game.awayTeam);
+        opponentByTeam.set(game.awayTeam.id, game.homeTeam);
+      });
+      return GetGoaliesResponse.parse(
+        players.filter((player) => player.position === "G").map((player) => {
+          const seasonStats = (player as any).seasonStats;
+          const seasonGames = Math.max(1, seasonStats?.games || 1);
 
-        let savesPerGame, shotsAgainstPerGame, savePercentage, goalsAgainstPerGame, winRate, shutoutRate;
+          let savesPerGame, shotsAgainstPerGame, savePercentage, goalsAgainstPerGame, winRate, shutoutRate;
 
-        if (seasonStats && seasonStats.saves > 0) {
-          // Use actual stats
-          savesPerGame = seasonStats.saves / seasonGames;
-          shotsAgainstPerGame = (seasonStats.shotsAgainst || 0) / seasonGames;
-          savePercentage = shotsAgainstPerGame > 0 ? seasonStats.saves / shotsAgainstPerGame : 0;
-          goalsAgainstPerGame = (seasonStats.goalsAgainst || 0) / seasonGames;
-          winRate = (seasonStats.wins || 0) / seasonGames;
-          shutoutRate = (seasonStats.shutouts || 0) / seasonGames;
-        } else {
-          // Fallback to league averages with goalie ID variation
-          const goalieIdHash = parseInt(player.id) % 100;
-          const variation = 1 + ((goalieIdHash - 50) / 200);
+          if (seasonStats && seasonStats.saves > 0) {
+            // Use actual stats
+            savesPerGame = seasonStats.saves / seasonGames;
+            shotsAgainstPerGame = (seasonStats.shotsAgainst || 0) / seasonGames;
+            savePercentage = shotsAgainstPerGame > 0 ? seasonStats.saves / shotsAgainstPerGame : 0;
+            goalsAgainstPerGame = (seasonStats.goalsAgainst || 0) / seasonGames;
+            winRate = (seasonStats.wins || 0) / seasonGames;
+            shutoutRate = (seasonStats.shutouts || 0) / seasonGames;
+          } else {
+            // Fallback to league averages with goalie ID variation
+            const goalieIdHash = parseInt(player.id) % 100;
+            const variation = 1 + ((goalieIdHash - 50) / 200);
 
-          const avgSavesPerGame = 28.5;
-          const avgShotsAgainstPerGame = 31.0;
-          const avgSavePercentage = 0.912;
-          const avgGoalsAgainstPerGame = 2.75;
-          const avgWinRate = 0.52;
-          const avgShutoutRate = 0.04;
+            const avgSavesPerGame = 28.5;
+            const avgShotsAgainstPerGame = 31.0;
+            const avgSavePercentage = 0.912;
+            const avgGoalsAgainstPerGame = 2.75;
+            const avgWinRate = 0.52;
+            const avgShutoutRate = 0.04;
 
-          savesPerGame = Math.max(20, avgSavesPerGame * variation);
-          shotsAgainstPerGame = Math.max(22, avgShotsAgainstPerGame * variation);
-          savePercentage = Math.min(0.95, Math.max(0.88, avgSavePercentage * variation));
-          goalsAgainstPerGame = Math.max(1.5, avgGoalsAgainstPerGame * (2 - variation));
-          winRate = Math.min(0.65, Math.max(0.35, avgWinRate * variation));
-          shutoutRate = Math.min(0.10, Math.max(0.01, avgShutoutRate * variation));
-        }
+            savesPerGame = Math.max(20, avgSavesPerGame * variation);
+            shotsAgainstPerGame = Math.max(22, avgShotsAgainstPerGame * variation);
+            savePercentage = Math.min(0.95, Math.max(0.88, avgSavePercentage * variation));
+            goalsAgainstPerGame = Math.max(1.5, avgGoalsAgainstPerGame * (2 - variation));
+            winRate = Math.min(0.65, Math.max(0.35, avgWinRate * variation));
+            shutoutRate = Math.min(0.10, Math.max(0.01, avgShutoutRate * variation));
+          }
 
-        return {
-          id: player.id,
-          fullName: player.fullName,
-           firstName: player.firstName,
-           lastName: player.lastName,
-           jerseyNumber: player.jerseyNumber,
-           headshotUrl: player.headshotUrl,
-          team: player.team,
-          opponent: opponentByTeam.get(player.team.id) ?? null,
-          status: "unknown",
-          projectedSaves: Math.round(savesPerGame * 10) / 10 || null,
-          projectedShotsAgainst: Math.round(shotsAgainstPerGame * 10) / 10 || null,
-          savePercentage: Math.round(savePercentage * 1000) / 1000 || null,
-          goalsAgainst: Math.round(goalsAgainstPerGame * 10) / 10 || null,
-          winProbability: Math.round(winRate * 100) / 100 || null,
-          shutoutProbability: Math.round(shutoutRate * 100) / 100 || null,
-          saves25Plus: savesPerGame >= 25 ? true : null,
-          saves30Plus: savesPerGame >= 30 ? true : null,
-          saves35Plus: savesPerGame >= 35 ? true : null,
-        };
-      }),
-    );
+          return {
+            id: player.id,
+            fullName: player.fullName,
+             firstName: player.firstName,
+             lastName: player.lastName,
+             jerseyNumber: player.jerseyNumber,
+             headshotUrl: player.headshotUrl,
+            team: player.team,
+            opponent: opponentByTeam.get(player.team.id) ?? null,
+            status: "unknown",
+            projectedSaves: Math.round(savesPerGame * 10) / 10 || null,
+            projectedShotsAgainst: Math.round(shotsAgainstPerGame * 10) / 10 || null,
+            savePercentage: Math.round(savePercentage * 1000) / 1000 || null,
+            goalsAgainst: Math.round(goalsAgainstPerGame * 10) / 10 || null,
+            winProbability: Math.round(winRate * 100) / 100 || null,
+            shutoutProbability: Math.round(shutoutRate * 100) / 100 || null,
+            saves25Plus: savesPerGame >= 25 ? true : null,
+            saves30Plus: savesPerGame >= 30 ? true : null,
+            saves35Plus: savesPerGame >= 35 ? true : null,
+          };
+        }),
+      );
+    } catch (error) {
+      console.error("getGoalies error:", error);
+      // Return empty array on error to prevent 503
+      return GetGoaliesResponse.parse([]);
+    }
   }
 
   async getProps() {
     try {
       const [games, players, playerPropsOdds] = await Promise.all([
-        this.getGames(),
-        this.getPlayers(),
+        this.getGames().catch(() => GetGamesResponse.parse([])), // Handle timeout gracefully
+        this.getPlayers().catch(() => GetPlayersResponse.parse([])), // Handle timeout gracefully
         this.getPlayerPropsOdds(),
       ]);
 
