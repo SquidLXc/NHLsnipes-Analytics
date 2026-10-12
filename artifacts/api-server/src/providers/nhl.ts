@@ -961,70 +961,79 @@ class NhlWebApiProvider implements NhlDataProvider {
   async getGoalies() {
     try {
       const players = await this.getPlayers();
+      console.log(`getGoalies: Total players loaded: ${players.length}`);
+
       let games = await this.getGames();
       if (!games.length) games = await this.getFutureGames();
+      console.log(`getGoalies: Games loaded: ${games.length}`);
+
       const opponentByTeam = new Map<string, ReturnType<typeof teamFromRaw>>();
       games.forEach((game) => {
         opponentByTeam.set(game.homeTeam.id, game.awayTeam);
         opponentByTeam.set(game.awayTeam.id, game.homeTeam);
       });
-      return GetGoaliesResponse.parse(
-        players.filter((player) => player.position === "G").map((player) => {
-          const seasonStats = (player as any).seasonStats;
-          const seasonGames = Math.max(1, seasonStats?.games || 1);
 
-          let savesPerGame, shotsAgainstPerGame, savePercentage, goalsAgainstPerGame, winRate, shutoutRate;
+      const goalies = players.filter((player) => player.position === "G");
+      console.log(`getGoalies: Goalies found: ${goalies.length}`);
 
-          if (seasonStats && seasonStats.saves > 0) {
-            // Use actual stats
-            savesPerGame = seasonStats.saves / seasonGames;
-            shotsAgainstPerGame = (seasonStats.shotsAgainst || 0) / seasonGames;
-            savePercentage = shotsAgainstPerGame > 0 ? seasonStats.saves / shotsAgainstPerGame : 0;
-            goalsAgainstPerGame = (seasonStats.goalsAgainst || 0) / seasonGames;
-            winRate = (seasonStats.wins || 0) / seasonGames;
-            shutoutRate = (seasonStats.shutouts || 0) / seasonGames;
-          } else {
-            // Fallback to league averages with goalie ID variation
-            const goalieIdHash = parseInt(player.id) % 100;
-            const variation = 1 + ((goalieIdHash - 50) / 200);
+      const goalieData = goalies.map((player) => {
+        const seasonStats = (player as any).seasonStats;
+        const seasonGames = Math.max(1, seasonStats?.games || 1);
 
-            const avgSavesPerGame = 28.5;
-            const avgShotsAgainstPerGame = 31.0;
-            const avgSavePercentage = 0.912;
-            const avgGoalsAgainstPerGame = 2.75;
-            const avgWinRate = 0.52;
-            const avgShutoutRate = 0.04;
+        let savesPerGame, shotsAgainstPerGame, savePercentage, goalsAgainstPerGame, winRate, shutoutRate;
 
-            savesPerGame = Math.max(20, avgSavesPerGame * variation);
-            shotsAgainstPerGame = Math.max(22, avgShotsAgainstPerGame * variation);
-            savePercentage = Math.min(0.95, Math.max(0.88, avgSavePercentage * variation));
-            goalsAgainstPerGame = Math.max(1.5, avgGoalsAgainstPerGame * (2 - variation));
-            winRate = Math.min(0.65, Math.max(0.35, avgWinRate * variation));
-            shutoutRate = Math.min(0.10, Math.max(0.01, avgShutoutRate * variation));
-          }
+        if (seasonStats && seasonStats.saves > 0) {
+          // Use actual stats
+          savesPerGame = seasonStats.saves / seasonGames;
+          shotsAgainstPerGame = (seasonStats.shotsAgainst || 0) / seasonGames;
+          savePercentage = shotsAgainstPerGame > 0 ? seasonStats.saves / shotsAgainstPerGame : 0;
+          goalsAgainstPerGame = (seasonStats.goalsAgainst || 0) / seasonGames;
+          winRate = (seasonStats.wins || 0) / seasonGames;
+          shutoutRate = (seasonStats.shutouts || 0) / seasonGames;
+        } else {
+          // Fallback to league averages with goalie ID variation
+          const goalieIdHash = parseInt(player.id) % 100;
+          const variation = 1 + ((goalieIdHash - 50) / 200);
 
-          return {
-            id: player.id,
-            fullName: player.fullName,
-             firstName: player.firstName,
-             lastName: player.lastName,
-             jerseyNumber: player.jerseyNumber,
-             headshotUrl: player.headshotUrl,
-            team: player.team,
-            opponent: opponentByTeam.get(player.team.id) ?? null,
-            status: "unknown",
-            projectedSaves: Math.round(savesPerGame * 10) / 10 || null,
-            projectedShotsAgainst: Math.round(shotsAgainstPerGame * 10) / 10 || null,
-            savePercentage: Math.round(savePercentage * 1000) / 1000 || null,
-            goalsAgainst: Math.round(goalsAgainstPerGame * 10) / 10 || null,
-            winProbability: Math.round(winRate * 100) / 100 || null,
-            shutoutProbability: Math.round(shutoutRate * 100) / 100 || null,
-            saves25Plus: savesPerGame >= 25 ? true : null,
-            saves30Plus: savesPerGame >= 30 ? true : null,
-            saves35Plus: savesPerGame >= 35 ? true : null,
-          };
-        }),
-      );
+          const avgSavesPerGame = 28.5;
+          const avgShotsAgainstPerGame = 31.0;
+          const avgSavePercentage = 0.912;
+          const avgGoalsAgainstPerGame = 2.75;
+          const avgWinRate = 0.52;
+          const avgShutoutRate = 0.04;
+
+          savesPerGame = Math.max(20, avgSavesPerGame * variation);
+          shotsAgainstPerGame = Math.max(22, avgShotsAgainstPerGame * variation);
+          savePercentage = Math.min(0.95, Math.max(0.88, avgSavePercentage * variation));
+          goalsAgainstPerGame = Math.max(1.5, avgGoalsAgainstPerGame * (2 - variation));
+          winRate = Math.min(0.65, Math.max(0.35, avgWinRate * variation));
+          shutoutRate = Math.min(0.10, Math.max(0.01, avgShutoutRate * variation));
+        }
+
+        return {
+          id: player.id,
+          fullName: player.fullName,
+           firstName: player.firstName,
+           lastName: player.lastName,
+           jerseyNumber: player.jerseyNumber,
+           headshotUrl: player.headshotUrl,
+          team: player.team,
+          opponent: opponentByTeam.get(player.team.id) ?? null,
+          status: "unknown",
+          projectedSaves: Math.round(savesPerGame * 10) / 10 || null,
+          projectedShotsAgainst: Math.round(shotsAgainstPerGame * 10) / 10 || null,
+          savePercentage: Math.round(savePercentage * 1000) / 1000 || null,
+          goalsAgainst: Math.round(goalsAgainstPerGame * 10) / 10 || null,
+          winProbability: Math.round(winRate * 100) / 100 || null,
+          shutoutProbability: Math.round(shutoutRate * 100) / 100 || null,
+          saves25Plus: savesPerGame >= 25 ? 1 : 0,
+          saves30Plus: savesPerGame >= 30 ? 1 : 0,
+          saves35Plus: savesPerGame >= 35 ? 1 : 0,
+        };
+      });
+
+      console.log(`getGoalies: Parsed ${goalieData.length} goalies`);
+      return GetGoaliesResponse.parse(goalieData);
     } catch (error) {
       console.error("getGoalies error:", error);
       // Return empty array on error to prevent 503
