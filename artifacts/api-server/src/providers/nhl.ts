@@ -646,11 +646,29 @@ class NhlWebApiProvider implements NhlDataProvider {
       }),
     );
 
-    // Skip stat fetching for now since it's preseason and stats aren't available
-    // We'll use position-based projections instead
+    // Fetch current season stats for all players
+    const playersWithStats = await Promise.all(
+      rosters.flat().map(async (player) => {
+        try {
+          const stats = await this.fetchJson<{ skaterStats?: any; goalieStats?: any }>(
+            `player/${player.id}/landing`,
+          );
+          return {
+            ...player,
+            seasonStats: stats.skaterStats?.regular?.[0] || stats.goalieStats?.regular?.[0] || null,
+          };
+        } catch {
+          return {
+            ...player,
+            seasonStats: null,
+          };
+        }
+      })
+    );
+
     try {
       playersCache = GetPlayersResponse.parse(
-        Array.from(new Map(rosters.flat().map((player) => [player.id, player])).values()),
+        Array.from(new Map(playersWithStats.map((player) => [player.id, player])).values()),
       );
     } catch (error) {
       console.error("Failed to parse players response:", error);
@@ -919,24 +937,38 @@ class NhlWebApiProvider implements NhlDataProvider {
     });
     return GetGoaliesResponse.parse(
       players.filter((player) => player.position === "G").map((player) => {
-        // Since it's preseason, use goalie ID for variation around league averages
-        const goalieIdHash = parseInt(player.id) % 100;
-        const variation = 1 + ((goalieIdHash - 50) / 200); // -25% to +25% variation
+        const seasonStats = (player as any).seasonStats;
+        const seasonGames = Math.max(1, seasonStats?.games || 1);
 
-        // League averages for goalies
-        const avgSavesPerGame = 28.5;
-        const avgShotsAgainstPerGame = 31.0;
-        const avgSavePercentage = 0.912;
-        const avgGoalsAgainstPerGame = 2.75;
-        const avgWinRate = 0.52;
-        const avgShutoutRate = 0.04;
+        let savesPerGame, shotsAgainstPerGame, savePercentage, goalsAgainstPerGame, winRate, shutoutRate;
 
-        const savesPerGame = Math.max(20, avgSavesPerGame * variation);
-        const shotsAgainstPerGame = Math.max(22, avgShotsAgainstPerGame * variation);
-        const savePercentage = Math.min(0.95, Math.max(0.88, avgSavePercentage * variation));
-        const goalsAgainstPerGame = Math.max(1.5, avgGoalsAgainstPerGame * (2 - variation));
-        const winRate = Math.min(0.65, Math.max(0.35, avgWinRate * variation));
-        const shutoutRate = Math.min(0.10, Math.max(0.01, avgShutoutRate * variation));
+        if (seasonStats && seasonStats.saves > 0) {
+          // Use actual stats
+          savesPerGame = seasonStats.saves / seasonGames;
+          shotsAgainstPerGame = (seasonStats.shotsAgainst || 0) / seasonGames;
+          savePercentage = shotsAgainstPerGame > 0 ? seasonStats.saves / shotsAgainstPerGame : 0;
+          goalsAgainstPerGame = (seasonStats.goalsAgainst || 0) / seasonGames;
+          winRate = (seasonStats.wins || 0) / seasonGames;
+          shutoutRate = (seasonStats.shutouts || 0) / seasonGames;
+        } else {
+          // Fallback to league averages with goalie ID variation
+          const goalieIdHash = parseInt(player.id) % 100;
+          const variation = 1 + ((goalieIdHash - 50) / 200);
+
+          const avgSavesPerGame = 28.5;
+          const avgShotsAgainstPerGame = 31.0;
+          const avgSavePercentage = 0.912;
+          const avgGoalsAgainstPerGame = 2.75;
+          const avgWinRate = 0.52;
+          const avgShutoutRate = 0.04;
+
+          savesPerGame = Math.max(20, avgSavesPerGame * variation);
+          shotsAgainstPerGame = Math.max(22, avgShotsAgainstPerGame * variation);
+          savePercentage = Math.min(0.95, Math.max(0.88, avgSavePercentage * variation));
+          goalsAgainstPerGame = Math.max(1.5, avgGoalsAgainstPerGame * (2 - variation));
+          winRate = Math.min(0.65, Math.max(0.35, avgWinRate * variation));
+          shutoutRate = Math.min(0.10, Math.max(0.01, avgShutoutRate * variation));
+        }
 
         return {
           id: player.id,
@@ -1018,27 +1050,36 @@ class NhlWebApiProvider implements NhlDataProvider {
           const opponent = opponentByTeam.get(player.team.id);
           if (!opponent) return null;
 
-          // Since it's preseason, use position-based projections with player ID for variation
-          // This ensures different players get different projections while being realistic
-          const playerIdHash = parseInt(player.id) % 100; // Use player ID to create variation
-          const position = player.position;
+          // Use actual season stats if available, otherwise use position-based fallback
+          const seasonStats = (player as any).seasonStats;
+          const seasonGames = Math.max(1, seasonStats?.games || 1);
 
-          // Position-based goal per game averages (season averages)
-          const positionAverages: Record<string, { gpg: number; sppg: number; ppg: number }> = {
-            'C': { gpg: 0.28, sppg: 2.8, ppg: 0.75 }, // Centers average
-            'L': { gpg: 0.25, sppg: 2.5, ppg: 0.60 }, // Left wing average
-            'R': { gpg: 0.25, sppg: 2.5, ppg: 0.60 }, // Right wing average
-            'D': { gpg: 0.08, sppg: 1.5, ppg: 0.35 }, // Defensemen average
-            'G': { gpg: 0.01, sppg: 0.1, ppg: 0.05 }, // Goalies (rarely score)
-          };
+          let seasonGoalsPerGame, seasonShotsPerGame, seasonPointsPerGame;
 
-          const avg = positionAverages[position] || positionAverages['C'];
+          if (seasonStats && seasonStats.goals > 0) {
+            // Use actual stats
+            seasonGoalsPerGame = seasonStats.goals / seasonGames;
+            seasonShotsPerGame = (seasonStats.sog || 0) / seasonGames;
+            seasonPointsPerGame = (seasonStats.points || 0) / seasonGames;
+          } else {
+            // Fallback to position-based averages with player ID variation
+            const playerIdHash = parseInt(player.id) % 100;
+            const position = player.position;
 
-          // Add variation based on player ID (-20% to +20%)
-          const variation = 1 + ((playerIdHash - 50) / 250);
-          const seasonGoalsPerGame = Math.max(0.02, avg.gpg * variation);
-          const seasonShotsPerGame = Math.max(0.5, avg.sppg * variation);
-          const seasonPointsPerGame = Math.max(0.1, avg.ppg * variation);
+            const positionAverages: Record<string, { gpg: number; sppg: number; ppg: number }> = {
+              'C': { gpg: 0.28, sppg: 2.8, ppg: 0.75 },
+              'L': { gpg: 0.25, sppg: 2.5, ppg: 0.60 },
+              'R': { gpg: 0.25, sppg: 2.5, ppg: 0.60 },
+              'D': { gpg: 0.08, sppg: 1.5, ppg: 0.35 },
+              'G': { gpg: 0.01, sppg: 0.1, ppg: 0.05 },
+            };
+
+            const avg = positionAverages[position] || positionAverages['C'];
+            const variation = 1 + ((playerIdHash - 50) / 250);
+            seasonGoalsPerGame = Math.max(0.02, avg.gpg * variation);
+            seasonShotsPerGame = Math.max(0.5, avg.sppg * variation);
+            seasonPointsPerGame = Math.max(0.1, avg.ppg * variation);
+          }
 
           // Calculate probability based on goals per game
           const baseProbability = Math.min(0.5, seasonGoalsPerGame * 1.8);
