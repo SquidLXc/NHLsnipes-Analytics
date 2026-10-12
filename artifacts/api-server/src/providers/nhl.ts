@@ -589,13 +589,8 @@ class NhlWebApiProvider implements NhlDataProvider {
           }
 
           console.log(`Fetched ${response.length} NHL player props from Parlay API`);
-          // Debug: Log sample props
-          console.log(`Sample Parlay props:`, response.slice(0, 3).map(p => ({
-            playerName: p.playerName,
-            market: p.market,
-            odds: p.odds,
-            bookmaker: p.bookmaker
-          })));
+          // Debug: Log raw sample props to see actual structure
+          console.log(`Raw sample Parlay props:`, JSON.stringify(response.slice(0, 2), null, 2));
           parlayPropsCache = { expiresAt: Date.now() + 600_000, data: response }; // 10 minute cache
           return response;
         } catch (error) {
