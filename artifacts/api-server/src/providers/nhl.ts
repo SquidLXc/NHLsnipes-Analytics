@@ -323,7 +323,9 @@ async function fetchParlayJson<T>(path: string, params?: Record<string, string>)
   const timeoutId = setTimeout(() => controller.abort(), 120_000); // Increased to 120s for slow Render network
 
   try {
-    console.log(`Parlay API request: ${url.toString()}`);
+    // Log URL without API key for security
+    const safeUrl = url.toString().replace(/apiKey=[^&]+/, 'apiKey=REDACTED');
+    console.log(`Parlay API request: ${safeUrl}`);
     const response = await fetch(url.toString(), {
       signal: controller.signal,
       headers: {
@@ -600,10 +602,9 @@ class NhlWebApiProvider implements NhlDataProvider {
         } catch (error) {
           console.error("Failed to fetch Parlay props:", error);
 
-          // If rate limited and we have cached data, return it
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          if (errorMessage.includes('rate limit') && parlayPropsCache && parlayPropsCache.data.length > 0) {
-            console.log("Rate limit hit on Parlay endpoint, returning cached data");
+          // If we have cached data, return it even on timeout
+          if (parlayPropsCache && parlayPropsCache.data.length > 0) {
+            console.log("Parlay API failed, returning cached data");
             return parlayPropsCache.data;
           }
 
