@@ -200,6 +200,7 @@ const syncHealth: DataHealth = {
 };
 
 const teamCache = new Map<string, ProviderData["teams"][number]>();
+let teamsCache: { expiresAt: number; data: ProviderData["teams"] } | null = null;
 let playersCache: ProviderData["players"] | null = null;
 let playersCacheAt = 0;
 let oddsCache: { expiresAt: number; data: ProviderData["odds"] } | null = null;
@@ -470,7 +471,7 @@ class NhlWebApiProvider implements NhlDataProvider {
   private async fetchJson<T>(path: string): Promise<T> {
     const response = await fetch(`${NHL_API_BASE_URL}/${path.replace(/^\//, "")}`, {
       headers: { accept: "application/json", "user-agent": "NHLsnipes/1.0" },
-      signal: AbortSignal.timeout(60_000), // Increased to 60s for slower stat fetching
+      signal: AbortSignal.timeout(120_000), // Increased to 120s for slow NHL API on Render
     });
     if (!response.ok) throw new Error(`NHL Web API returned HTTP ${response.status} for ${path}`);
     return (await response.json()) as T;
@@ -615,18 +616,27 @@ class NhlWebApiProvider implements NhlDataProvider {
   }
 
   private async loadTeams() {
+    // Use cached teams if available (30 minute cache)
+    if (teamsCache && Date.now() < teamsCache.expiresAt) {
+      return teamsCache.data;
+    }
+
     try {
       const raw = await this.fetchJson<{ standings?: RawTeam[] }>("standings/now");
       for (const standing of raw.standings ?? []) teamFromRaw(standing);
-      return Array.from(new Map(Array.from(teamCache.values()).map((team) => [team.id, team])).values());
+      const teams = Array.from(new Map(Array.from(teamCache.values()).map((team) => [team.id, team])).values());
+      teamsCache = { expiresAt: Date.now() + 1800_000, data: teams }; // 30 minute cache
+      return teams;
     } catch (error) {
       console.error("loadTeams error:", error);
+      // Return cached data if available
+      if (teamsCache) return teamsCache.data;
       return [];
     }
   }
 
   private async loadPlayers() {
-    if (playersCache && Date.now() - playersCacheAt < 600_000) return playersCache; // Increased to 10 minutes
+    if (playersCache && Date.now() - playersCacheAt < 1800_000) return playersCache; // Increased to 30 minutes to reduce NHL API calls
 
     try {
       const teams = await this.loadTeams();
