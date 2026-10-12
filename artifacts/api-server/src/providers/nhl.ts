@@ -320,9 +320,10 @@ async function fetchParlayJson<T>(path: string, params?: Record<string, string>)
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30_000);
+  const timeoutId = setTimeout(() => controller.abort(), 120_000); // Increased to 120s for slow Render network
 
   try {
+    console.log(`Parlay API request: ${url.toString()}`);
     const response = await fetch(url.toString(), {
       signal: controller.signal,
       headers: {
@@ -333,6 +334,7 @@ async function fetchParlayJson<T>(path: string, params?: Record<string, string>)
     clearTimeout(timeoutId);
 
     if (!response.ok) {
+      console.error(`Parlay API returned HTTP ${response.status}`);
       const errorText = await response.text();
       throw new Error(`Parlay API returned HTTP ${response.status}: ${errorText}`);
     }
@@ -561,11 +563,13 @@ class NhlWebApiProvider implements NhlDataProvider {
     try {
       // Use cached props if available to avoid rate limiting
       if (parlayPropsCache && parlayPropsCache.expiresAt > Date.now()) {
+        console.log("Using cached Parlay props");
         return parlayPropsCache.data;
       }
 
       // If a request is already in progress, wait for it
       if (parlayPropsPromise) {
+        console.log("Waiting for in-progress Parlay request");
         return parlayPropsPromise;
       }
 
