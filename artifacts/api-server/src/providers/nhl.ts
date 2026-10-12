@@ -666,17 +666,57 @@ class NhlWebApiProvider implements NhlDataProvider {
       // Process in batches to avoid overwhelming the API
       const batchSize = 20;
       const playersWithStats: any[] = [];
+      let statsLogCount = 0;
       for (let i = 0; i < rosters.flat().length; i += batchSize) {
         const batch = rosters.flat().slice(i, i + batchSize);
         const batchResults = await Promise.all(
           batch.map(async (player) => {
             try {
-              const stats = await this.fetchJson<{ skaterStats?: any; goalieStats?: any }>(
-                `player/${player.id}/landing`,
-              );
+              // Try different NHL API endpoints for stats
+              let stats: any = null;
+
+              // Try landing endpoint first
+              try {
+                const landingStats = await this.fetchJson<{ skaterStats?: any; goalieStats?: any }>(
+                  `player/${player.id}/landing`,
+                );
+                stats = landingStats.skaterStats?.regular?.[0] || landingStats.goalieStats?.regular?.[0];
+                if (stats && (stats.goals > 0 || stats.goals === 0) && statsLogCount < 5) {
+                  console.log(`Got stats from landing endpoint for ${player.fullName}:`, stats);
+                  statsLogCount++;
+                }
+              } catch (e) {
+                // Silently fail for landing endpoint
+              }
+
+              // If landing didn't work, try stats endpoint
+              if (!stats) {
+                try {
+                  const statsData = await this.fetchJson<{ stats?: any[] }>(
+                    `player/${player.id}/stats`,
+                  );
+                  // Look for current season regular season stats
+                  if (statsData.stats && statsData.stats.length > 0) {
+                    const currentSeason = statsData.stats.find((s: any) =>
+                      s.type?.displayName === 'regular' &&
+                      (s.season || s.seasonId)?.toString().startsWith('202')
+                    );
+                    if (currentSeason && currentSeason.splits && currentSeason.splits.length > 0) {
+                      stats = currentSeason.splits[0].stat;
+                      if (statsLogCount < 5) {
+                        console.log(`Got stats from stats endpoint for ${player.fullName}:`, stats);
+                        statsLogCount++;
+                      }
+                    }
+                  }
+                } catch (e) {
+                  // Silently fail for stats endpoint
+                }
+              }
+
               return {
                 ...player,
-                seasonStats: stats.skaterStats?.regular?.[0] || stats.goalieStats?.regular?.[0] || null,
+                seasonStats: stats || null,
               };
             } catch {
               return {
@@ -1111,39 +1151,44 @@ class NhlWebApiProvider implements NhlDataProvider {
 
           // Use actual season stats if available, otherwise use position-based fallback
           const seasonStats = (player as any).seasonStats;
-          const seasonGames = Math.max(1, seasonStats?.games || 1);
+          const seasonGames = Math.max(1, seasonStats?.games || seasonStats?.game || 1);
 
           let seasonGoalsPerGame, seasonShotsPerGame, seasonPointsPerGame;
 
-          if (seasonStats && seasonStats.goals > 0) {
-            // Use actual stats
-            seasonGoalsPerGame = seasonStats.goals / seasonGames;
-            seasonShotsPerGame = (seasonStats.sog || 0) / seasonGames;
+          if (seasonStats && (seasonStats.goals > 0 || seasonStats.goals === 0)) {
+            // Use actual stats (handle different field names from different endpoints)
+            seasonGoalsPerGame = (seasonStats.goals || 0) / seasonGames;
+            seasonShotsPerGame = (seasonStats.shots || seasonStats.sog || 0) / seasonGames;
             seasonPointsPerGame = (seasonStats.points || 0) / seasonGames;
           } else {
-            // Fallback to position-based averages with player ID variation
+            // Fallback to position-based ranges with player ID variation
             const playerIdHash = parseInt(player.id) % 100;
             const position = player.position;
 
-            const positionAverages: Record<string, { gpg: number; sppg: number; ppg: number }> = {
-              'C': { gpg: 0.28, sppg: 2.8, ppg: 0.75 },
-              'L': { gpg: 0.25, sppg: 2.5, ppg: 0.60 },
-              'R': { gpg: 0.25, sppg: 2.5, ppg: 0.60 },
-              'D': { gpg: 0.08, sppg: 1.5, ppg: 0.35 },
-              'G': { gpg: 0.01, sppg: 0.1, ppg: 0.05 },
+            // Position-based goal per game ranges (min/max for realistic distribution)
+            const positionRanges: Record<string, { minGPG: number; maxGPG: number; minSPPG: number; maxSPPG: number }> = {
+              'C': { minGPG: 0.10, maxGPG: 0.50, minSPPG: 1.5, maxSPPG: 4.0 },
+              'L': { minGPG: 0.08, maxGPG: 0.42, minSPPG: 1.3, maxSPPG: 3.5 },
+              'R': { minGPG: 0.08, maxGPG: 0.42, minSPPG: 1.3, maxSPPG: 3.5 },
+              'D': { minGPG: 0.02, maxGPG: 0.18, minSPPG: 0.8, maxSPPG: 2.2 },
+              'G': { minGPG: 0.00, maxGPG: 0.05, minSPPG: 0.05, maxSPPG: 0.3 },
             };
 
-            const avg = positionAverages[position] || positionAverages['C'];
-            const variation = 1 + ((playerIdHash - 50) / 250);
-            seasonGoalsPerGame = Math.max(0.02, avg.gpg * variation);
-            seasonShotsPerGame = Math.max(0.5, avg.sppg * variation);
-            seasonPointsPerGame = Math.max(0.1, avg.ppg * variation);
+            const range = positionRanges[position] || positionRanges['C'];
+
+            // Map player ID hash to a value between 0 and 1 for better distribution
+            const hashNormalized = playerIdHash / 100;
+
+            // Use hash to interpolate within the position range
+            seasonGoalsPerGame = range.minGPG + (range.maxGPG - range.minGPG) * hashNormalized;
+            seasonShotsPerGame = range.minSPPG + (range.maxSPPG - range.minSPPG) * hashNormalized;
+            seasonPointsPerGame = Math.max(0.1, seasonGoalsPerGame * 2 + seasonShotsPerGame * 0.1);
           }
 
           // Calculate probability based on goals per game
-          const baseProbability = Math.min(0.5, seasonGoalsPerGame * 1.8);
-          const minProbability = 0.08;
-          const overProbability = Math.min(0.65, Math.max(minProbability, baseProbability));
+          const baseProbability = Math.min(0.60, seasonGoalsPerGame * 1.5);
+          const minProbability = 0.03;
+          const overProbability = Math.min(0.75, Math.max(minProbability, baseProbability));
           const underProbability = 1 - overProbability;
           const modelProjection = seasonGoalsPerGame;
 
@@ -1214,6 +1259,14 @@ class NhlWebApiProvider implements NhlDataProvider {
         };
       })
     );
+
+    // Log sample projections for debugging
+    console.log(`=== Sample Player Projections ===`);
+    props.slice(0, 5).forEach((p) => {
+      if (p) {
+        console.log(`${p.player.fullName}: projection=${p.modelProjection.toFixed(3)}, prob=${(p.overProbability * 100).toFixed(1)}%, edge=${(p.edge * 100).toFixed(1)}%`);
+      }
+    });
 
     // Filter out nulls and sort by edge
     const validProps = props.filter((p): p is NonNullable<typeof p> => p !== null);
