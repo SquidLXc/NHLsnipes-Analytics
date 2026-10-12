@@ -25,9 +25,23 @@ app.listen(port, "0.0.0.0", (err) => {
 
   logger.info({ port }, "Server listening");
 
+  // Warm up caches on startup (don't block server start)
+  const provider = getNhlProvider();
+  setTimeout(() => {
+    logger.info("Warming up data caches...");
+    Promise.all([
+      provider.getTeams().catch(e => logger.error({ err: e }, "Failed to warm up teams cache")),
+      provider.getPlayers().catch(e => logger.error({ err: e }, "Failed to warm up players cache")),
+      provider.getGames().catch(e => logger.error({ err: e }, "Failed to warm up games cache")),
+    ]).then(() => {
+      logger.info("Data cache warmup complete");
+    }).catch(e => {
+      logger.error({ err: e }, "Data cache warmup failed");
+    });
+  }, 1000);
+
   const intervalMs = Number(process.env.NHLSNIPES_SYNC_INTERVAL_MS ?? 0);
   if (Number.isFinite(intervalMs) && intervalMs > 0) {
-    const provider = getNhlProvider();
     const runSync = () => {
       void provider.sync().catch((error) => {
         logger.error({ err: error }, "Scheduled NHL sync failed");
