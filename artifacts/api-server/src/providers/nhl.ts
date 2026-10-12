@@ -660,25 +660,37 @@ class NhlWebApiProvider implements NhlDataProvider {
         }),
       );
 
+      console.log(`loadPlayers: Loaded ${rosters.flat().length} players from rosters`);
+
       // Fetch current season stats for all players (with concurrency limit to avoid timeouts)
-      const playersWithStats = await Promise.all(
-        rosters.flat().map(async (player) => {
-          try {
-            const stats = await this.fetchJson<{ skaterStats?: any; goalieStats?: any }>(
-              `player/${player.id}/landing`,
-            );
-            return {
-              ...player,
-              seasonStats: stats.skaterStats?.regular?.[0] || stats.goalieStats?.regular?.[0] || null,
-            };
-          } catch {
-            return {
-              ...player,
-              seasonStats: null,
-            };
-          }
-        })
-      );
+      // Process in batches to avoid overwhelming the API
+      const batchSize = 20;
+      const playersWithStats: any[] = [];
+      for (let i = 0; i < rosters.flat().length; i += batchSize) {
+        const batch = rosters.flat().slice(i, i + batchSize);
+        const batchResults = await Promise.all(
+          batch.map(async (player) => {
+            try {
+              const stats = await this.fetchJson<{ skaterStats?: any; goalieStats?: any }>(
+                `player/${player.id}/landing`,
+              );
+              return {
+                ...player,
+                seasonStats: stats.skaterStats?.regular?.[0] || stats.goalieStats?.regular?.[0] || null,
+              };
+            } catch {
+              return {
+                ...player,
+                seasonStats: null,
+              };
+            }
+          })
+        );
+        playersWithStats.push(...batchResults);
+      }
+
+      const playersWithStatsCount = playersWithStats.filter(p => p.seasonStats && p.seasonStats.goals > 0).length;
+      console.log(`loadPlayers: ${playersWithStatsCount} players with actual stats, ${playersWithStats.length - playersWithStatsCount} without stats`);
 
       try {
         playersCache = GetPlayersResponse.parse(
@@ -1365,7 +1377,7 @@ class NhlWebApiProvider implements NhlDataProvider {
       });
 
       const data = GetOddsResponse.parse({
-        provider: "TheRundown",
+        provider: "TheRundown & Parlay",
         configured: true,
         lastUpdated: new Date().toISOString(),
         games
@@ -1511,8 +1523,8 @@ class NhlWebApiProvider implements NhlDataProvider {
             provider: this.name,
             lastUpdated: new Date().toISOString(),
             message: games.length > 0
-              ? `Official NHL schedule, including preseason when available, standings, roster and player data is available. ${THERUNDOWN_API_KEY ? "Sportsbook odds are connected via TheRundown." : "Sportsbook odds are not configured."} Model feed is not configured.`
-              : `Official NHL data is connected, but no verified games were returned for today's NHL date. ${INCLUDE_PRESEASON ? "Preseason is included when the provider publishes it." : `Preseason is excluded before ${NHL_SEASON_START_DATE}.`} ${THERUNDOWN_API_KEY ? "Sportsbook odds are connected via TheRundown when markets are posted." : "Sportsbook odds are not configured."} Model feed is not configured.`,
+              ? `Official NHL schedule, including preseason when available, standings, roster and player data is available. ${THERUNDOWN_API_KEY ? "Sportsbook odds are connected via TheRundown. Player props via Parlay API." : "Sportsbook odds are not configured."} Model feed is not configured.`
+              : `Official NHL data is connected, but no verified games were returned for today's NHL date. ${INCLUDE_PRESEASON ? "Preseason is included when the provider publishes it." : `Preseason is excluded before ${NHL_SEASON_START_DATE}.`} ${THERUNDOWN_API_KEY ? "Sportsbook odds are connected via TheRundown when markets are posted. Player props via Parlay API." : "Sportsbook odds are not configured."} Model feed is not configured.`,
           },
           games: games.length,
           snipes: snipes.length,
