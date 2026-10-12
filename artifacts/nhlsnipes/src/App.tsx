@@ -96,8 +96,25 @@ function PageHeader({ eyebrow, title, copy, action }: { eyebrow: string; title: 
 function AppShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const dataHealth = useDataHealth();
   const feedLabel = dataHealth.isLoading ? 'DATA FEED CHECKING' : dataHealth.data?.lastSuccessfulSync ? 'DATA CURRENT' : dataHealth.data?.connection === 'connected' ? 'SYNC REQUIRED' : 'DATA FEED OFFLINE';
+  const { data: liveAlerts, isLoading: alertsLoading } = useGetLiveAlerts({ query: { queryKey: getGetLiveAlertsQueryKey() } });
+
+  // Close notifications when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('[data-testid="button-notifications"]') && !target.closest('.relative')) {
+        setNotificationsOpen(false);
+      }
+    };
+    if (notificationsOpen) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [notificationsOpen]);
+
   return <div className="min-h-[100dvh] bg-background">
     <aside className={`fixed inset-y-0 left-0 z-40 flex w-[244px] flex-col border-r border-sidebar-border bg-sidebar transition-transform md:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
       <div className="flex h-[76px] items-center border-b border-sidebar-border px-6"><Link data-testid="link-brand" href="/" className="flex items-center gap-3"><span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-primary text-primary-foreground"><Zap size={16} fill="currentColor" /></span><span><span className="block font-mono text-[14px] font-medium tracking-[-.04em] text-foreground">NHL<span className="text-primary">snipes</span></span><span className="mt-0.5 block font-mono text-[8px] tracking-[.08em] text-muted-foreground">build by SquidLxc</span></span></Link></div>
@@ -129,7 +146,49 @@ function AppShell({ children }: { children: React.ReactNode }) {
         <Link data-testid="link-admin" href="/admin" className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs ${location === '/admin' ? 'bg-secondary/10 text-secondary' : 'text-sidebar-foreground hover:bg-sidebar-accent'}`}><SlidersHorizontal size={15} /><span>Ops / data health</span></Link><div className="mt-5 flex items-center gap-2 px-3 text-[10px] font-mono uppercase tracking-[.12em] text-muted-foreground"><span className="h-1.5 w-1.5 rounded-full bg-primary" />Terminal online</div></div>
     </aside>
     {open && <button data-testid="button-close-menu" aria-label="Close menu" onClick={() => setOpen(false)} className="fixed inset-0 z-30 bg-background/70 backdrop-blur-sm md:hidden"><X className="absolute right-5 top-5 text-muted-foreground" /></button>}
-    <div className="md:pl-[244px]"><header className="sticky top-0 z-20 flex h-[76px] items-center justify-between border-b border-border/80 bg-background/90 px-4 backdrop-blur-xl md:px-8"><button data-testid="button-open-menu" aria-label="Open menu" onClick={() => setOpen(true)} className="rounded-lg border border-border p-2 text-muted-foreground md:hidden"><Menu size={18} /></button><div className="hidden items-center gap-2 text-[10px] font-mono uppercase tracking-[.16em] text-muted-foreground md:flex"><span className="text-primary">NHL /</span> Decision terminal <span className="mx-1 text-border">•</span> {shortDate(new Date().toISOString())}</div><div className="ml-auto flex items-center gap-2"><button data-testid="button-notifications" className="rounded-lg border border-border p-2 text-muted-foreground hover:border-primary/40 hover:text-primary"><Bell size={16} /></button><Link data-testid="link-admin-top" href="/admin" className="hidden items-center gap-2 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold text-muted-foreground hover:border-primary/40 hover:text-foreground sm:flex"><span className={`h-2 w-2 rounded-full ${dataHealth.data?.lastSuccessfulSync ? 'bg-primary' : 'bg-accent'}`} />{feedLabel}</Link></div></header><main className="mx-auto max-w-[1440px] px-4 py-7 md:px-8 md:py-9">{children}</main><footer className="border-t border-border/80 px-4 py-6 text-[10px] leading-5 text-muted-foreground md:px-8"><p>NHLsnipes is an independent sports analytics platform and is not affiliated with or endorsed by the National Hockey League.</p><p>Analytics are informational and do not guarantee outcomes.</p></footer></div>
+    <div className="md:pl-[244px]">
+      <header className="sticky top-0 z-20 flex h-[76px] items-center justify-between border-b border-border/80 bg-background/90 px-4 backdrop-blur-xl md:px-8">
+        <button data-testid="button-open-menu" aria-label="Open menu" onClick={() => setOpen(true)} className="rounded-lg border border-border p-2 text-muted-foreground md:hidden"><Menu size={18} /></button>
+        <div className="hidden items-center gap-2 text-[10px] font-mono uppercase tracking-[.16em] text-muted-foreground md:flex">
+          <span className="text-primary">NHL /</span> Decision terminal <span className="mx-1 text-border">•</span> {shortDate(new Date().toISOString())}
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <div className="relative">
+            <button data-testid="button-notifications" onClick={() => setNotificationsOpen(!notificationsOpen)} className="rounded-lg border border-border p-2 text-muted-foreground hover:border-primary/40 hover:text-primary"><Bell size={16} /></button>
+            {notificationsOpen && (
+              <div className="absolute right-0 top-full mt-2 w-80 rounded-xl border border-border bg-card/95 shadow-xl p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="font-mono text-[10px] uppercase tracking-[.16em] text-muted-foreground">Live Alerts</p>
+                  <button onClick={() => setNotificationsOpen(false)} className="text-muted-foreground hover:text-foreground"><X size={14} /></button>
+                </div>
+                {alertsLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading alerts...</p>
+                ) : liveAlerts && liveAlerts.length > 0 ? (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {liveAlerts.slice(0, 5).map((alert) => (
+                      <div key={alert.id} className="rounded-lg border border-border/70 bg-muted/30 p-3">
+                        <p className="text-xs font-semibold">{alert.title}</p>
+                        <p className="mt-1 text-[10px] text-muted-foreground">{alert.message}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No active alerts</p>
+                )}
+              </div>
+            )}
+          </div>
+          <Link data-testid="link-admin-top" href="/admin" className="hidden items-center gap-2 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold text-muted-foreground hover:border-primary/40 hover:text-foreground sm:flex">
+            <span className={`h-2 w-2 rounded-full ${dataHealth.data?.lastSuccessfulSync ? 'bg-primary' : 'bg-accent'}`} />{feedLabel}
+          </Link>
+        </div>
+      </header>
+      <main className="mx-auto max-w-[1440px] px-4 py-7 md:px-8 md:py-9">{children}</main>
+      <footer className="border-t border-border/80 px-4 py-6 text-[10px] leading-5 text-muted-foreground md:px-8">
+        <p>NHLsnipes is an independent sports analytics platform and is not affiliated with or endorsed by the National Hockey League.</p>
+        <p>Analytics are informational and do not guarantee outcomes.</p>
+      </footer>
+    </div>
   </div>;
 }
 
