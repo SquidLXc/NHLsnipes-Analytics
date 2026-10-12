@@ -473,12 +473,21 @@ class NhlWebApiProvider implements NhlDataProvider {
   readonly name = "NHL Web API";
 
   private async fetchJson<T>(path: string): Promise<T> {
-    const response = await fetch(`${NHL_API_BASE_URL}/${path.replace(/^\//, "")}`, {
-      headers: { accept: "application/json", "user-agent": "NHLsnipes/1.0" },
-      signal: AbortSignal.timeout(120_000), // Increased to 120s for slow NHL API on Render
-    });
-    if (!response.ok) throw new Error(`NHL Web API returned HTTP ${response.status} for ${path}`);
-    return (await response.json()) as T;
+    // Add a hard timeout wrapper
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`NHL API request to ${path} timed out after 90s`)), 90_000)
+    );
+
+    const fetchPromise = (async () => {
+      const response = await fetch(`${NHL_API_BASE_URL}/${path.replace(/^\//, "")}`, {
+        headers: { accept: "application/json", "user-agent": "NHLsnipes/1.0" },
+        signal: AbortSignal.timeout(120_000), // Increased to 120s for slow NHL API on Render
+      });
+      if (!response.ok) throw new Error(`NHL Web API returned HTTP ${response.status} for ${path}`);
+      return (await response.json()) as T;
+    })();
+
+    return Promise.race([fetchPromise, timeoutPromise]);
   }
 
   private async getTheRundownEvents(includePlayerProps: boolean = true): Promise<TheRundownEvent[]> {
@@ -580,13 +589,21 @@ class NhlWebApiProvider implements NhlDataProvider {
         try {
           console.log("Fetching NHL player props from Parlay API...");
 
-          const response = await fetchParlayJson<ParlayProp[]>(
-            `/sports/${PARLAY_NHL_SPORT_KEY}/props`,
-            {
-              bookmakers: "draftkings,fanduel,betmgm", // Priority sportsbooks
-              limit: "10000", // Get all available props
-            }
+          // Add a hard timeout for the entire operation
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Parlay API operation timed out after 90s")), 90_000)
           );
+
+          const response = await Promise.race([
+            fetchParlayJson<ParlayProp[]>(
+              `/sports/${PARLAY_NHL_SPORT_KEY}/props`,
+              {
+                bookmakers: "draftkings,fanduel,betmgm", // Priority sportsbooks
+                limit: "10000", // Get all available props
+              }
+            ),
+            timeoutPromise
+          ]);
 
           if (!response || response.length === 0) {
             console.log("No Parlay props returned");
@@ -608,6 +625,7 @@ class NhlWebApiProvider implements NhlDataProvider {
             return parlayPropsCache.data;
           }
 
+          console.log("Parlay API failed and no cached data available, returning empty array");
           return [];
         } finally {
           // Clear the promise after completion
