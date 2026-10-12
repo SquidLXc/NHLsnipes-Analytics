@@ -1730,9 +1730,13 @@ class NhlWebApiProvider implements NhlDataProvider {
       return { provider: this.name, startedAt, completedAt, teamsImported: teams.length, gamesImported: games.length, playersImported: players.length, playerStatsImported: 0, goalieStatsImported: 0, errors: [] };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown synchronization error";
+      console.error("Sync failed:", message);
       syncHealth.connection = "error";
       syncHealth.errors = [message];
-      throw error;
+      syncHealth.lastSuccessfulSync = null; // Clear on error
+      // Return error report instead of throwing
+      const completedAt = new Date().toISOString();
+      return { provider: this.name, startedAt, completedAt, teamsImported: 0, gamesImported: 0, playersImported: 0, playerStatsImported: 0, goalieStatsImported: 0, errors: [message] };
     }
   }
 }
