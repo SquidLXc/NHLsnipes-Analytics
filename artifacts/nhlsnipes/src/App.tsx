@@ -458,7 +458,7 @@ function PropsPage() {
     <PageHeader
       eyebrow="Today's Top Edges / AI Predictions"
       title="Player Props"
-      copy="AI-generated goal probabilities matched with live sportsbook odds from TheRundown and Parlay API. Edge = Model Probability - Implied Odds Probability."
+      copy="AI-generated goal probabilities matched with live sportsbook odds from TheRundown and Parlay API. When NHL stats are unavailable, sportsbook-implied probability is used as fallback. Edge = Model Probability - Implied Odds Probability."
       action={<Link data-testid="link-snipes-from-props" href="/snipes" className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary">All Snipes <ArrowUpRight size={14} /></Link>}
     />
     
@@ -491,6 +491,8 @@ function PropsPage() {
 function TopEdgeCard({ prop, rank }: { prop: Prop; rank: number }) {
   const available = prop.lineStatus === 'available';
   const americanOdds = prop.line !== null ? (prop.line > 0 ? `+${Math.round(prop.line)}` : Math.round(prop.line).toString()) : '—';
+  // Strip "(implied)" suffix for cleaner display
+  const sourceLabel = prop.source ? prop.source.replace(' (implied)', '') : '—';
   
   return (
     <div data-testid={`card-top-edge-${prop.id}`} className="grid gap-4 rounded-lg border-2 border-primary/20 bg-card p-4 transition-all hover:border-primary/40 hover:shadow-lg md:grid-cols-[auto_1.5fr_1fr_1fr_1fr_auto] md:items-center">
@@ -523,7 +525,7 @@ function TopEdgeCard({ prop, rank }: { prop: Prop; rank: number }) {
         <p className={`mt-1 text-xl font-bold ${available ? 'text-foreground' : 'text-muted-foreground'}`}>
           {available ? americanOdds : 'N/A'}
         </p>
-        <p className="text-[9px] text-muted-foreground">{available ? prop.source : 'not available'}</p>
+        <p className="text-[9px] text-muted-foreground">{available ? sourceLabel : 'not available'}</p>
       </div>
       
       <div>
@@ -549,7 +551,8 @@ function TopEdgeCard({ prop, rank }: { prop: Prop; rank: number }) {
 function PropCard({ prop }: { prop: Prop }) {
   const available = prop.lineStatus === 'available';
   const americanOdds = prop.line !== null ? (prop.line > 0 ? `+${Math.round(prop.line)}` : Math.round(prop.line).toString()) : '—';
-  const sourceLabel = prop.source || '—';
+  // Strip "(implied)" suffix for cleaner display
+  const sourceLabel = prop.source ? prop.source.replace(' (implied)', '') : '—';
 
   return <div data-testid={`card-prop-${prop.id}`} className="grid gap-4 rounded-xl border border-border bg-card/70 p-4 transition-colors hover:border-secondary/40 md:grid-cols-[1.5fr_.9fr_.9fr_.8fr_auto] md:items-center"><div className="flex items-center gap-3"><PlayerImage player={prop.player} size="md" /><div><Link data-testid={`link-prop-player-${prop.player.id}`} href={`/players/${prop.player.id}`} className="text-sm font-bold hover:text-primary">{prop.player.fullName}</Link><p className="mt-1 text-[10px] text-muted-foreground">{prop.player.team.abbreviation} vs {prop.opponent.abbreviation} · {prop.market}</p></div></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">AI Probability</p><p className="mt-1 text-lg font-bold text-primary">{pct(prop.overProbability)}</p></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">Sportsbook Odds</p><p className={`mt-1 text-lg font-bold ${available ? 'text-foreground' : 'text-muted-foreground'}`}>{available ? americanOdds : 'N/A'}</p><p className="text-[9px] text-muted-foreground">{available ? sourceLabel : 'not available'}</p></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">Edge</p><p className={`mt-1 text-lg font-bold ${prop.edge && prop.edge > 0 ? 'text-accent' : 'text-muted-foreground'}`}>{pct(prop.edge)}</p></div><div className="flex items-center gap-2 md:justify-end"><span className={`rounded-full border px-2 py-1 text-[9px] uppercase tracking-wider ${available ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border text-muted-foreground'}`}>{available ? 'live' : 'no odds'}</span><span className={`rounded-full px-2 py-1 text-[9px] uppercase ${prop.confidence === 'ELITE' || prop.confidence === 'STRONG' ? 'bg-accent/10 text-accent' : 'bg-secondary/10 text-secondary'}`}>{prop.confidence || 'watch'}</span></div></div>;
 }

@@ -1224,12 +1224,13 @@ class NhlWebApiProvider implements NhlDataProvider {
           const opponent = opponentByTeam.get(player.team.id);
           if (!opponent) return null;
 
-          // Use actual season stats if available, otherwise mark probability as unavailable
+          // Use actual season stats if available, otherwise use sportsbook-implied probability as fallback
           const seasonStats = (player as any).seasonStats;
           const seasonGames = Math.max(1, seasonStats?.games || seasonStats?.game || 1);
 
           let seasonGoalsPerGame, seasonShotsPerGame, seasonPointsPerGame;
           let hasValidStats = false;
+          let usingSportsbookImplied = false;
 
           if (seasonStats && (seasonStats.goals > 0 || seasonStats.goals === 0)) {
             // Use actual stats (handle different field names from different endpoints)
@@ -1239,14 +1240,33 @@ class NhlWebApiProvider implements NhlDataProvider {
             hasValidStats = true;
             console.log(`${player.fullName}: Using real stats - GPG=${seasonGoalsPerGame.toFixed(3)}, games=${seasonGames}`);
           } else {
-            // No stats available - do NOT use baseline, mark as unavailable
-            seasonGoalsPerGame = 0;
-            seasonShotsPerGame = 0;
-            seasonPointsPerGame = 0;
-            console.log(`${player.fullName}: No season stats available, probability will be unavailable`);
+            // No NHL stats available - try to use sportsbook implied probability from odds as fallback
+            const matchingOddsForProbability = oddsMap.get(canonicalPlayerName(player.fullName)) ||
+                                           oddsMap.get(canonicalPlayerName(`${player.lastName}, ${player.firstName}`));
+            if (matchingOddsForProbability && matchingOddsForProbability.odds) {
+              // Convert sportsbook odds to probability
+              const sportsbookOdds = matchingOddsForProbability.odds;
+              const sportsbookImplied = sportsbookOdds > 0
+                ? 100 / (sportsbookOdds + 100)
+                : Math.abs(sportsbookOdds) / (Math.abs(sportsbookOdds) + 100);
+              
+              // Use sportsbook implied as GPG estimate (conservative adjustment)
+              seasonGoalsPerGame = sportsbookImplied;
+              seasonShotsPerGame = sportsbookImplied * 10; // Rough estimate: 10 shots per goal
+              seasonPointsPerGame = sportsbookImplied * 1.5; // Rough estimate
+              hasValidStats = true;
+              usingSportsbookImplied = true;
+              console.log(`${player.fullName}: Using sportsbook-implied probability as fallback - ${sportsbookImplied.toFixed(3)}`);
+            } else {
+              // No stats at all - mark as unavailable
+              seasonGoalsPerGame = 0;
+              seasonShotsPerGame = 0;
+              seasonPointsPerGame = 0;
+              console.log(`${player.fullName}: No stats available (NHL or sportsbook), probability unavailable`);
+            }
           }
 
-          // Calculate probability based on goals per game ONLY if stats are valid
+          // Calculate probability based on goals per game
           let overProbability, underProbability, modelProjection;
           if (hasValidStats) {
             const baseProbability = seasonGoalsPerGame * 1.5;
@@ -1297,7 +1317,7 @@ class NhlWebApiProvider implements NhlDataProvider {
         // Don't skip players with invalid odds - just mark them as unavailable
         const hasValidOdds = odds !== null && odds !== 0 && odds !== undefined && !isNaN(odds);
 
-        // Calculate edge ONLY if we have BOTH valid odds AND valid probability
+        // Calculate edge if we have valid odds AND valid probability (either NHL stats or sportsbook-implied)
         let edge = null;
         if (hasValidOdds && hasValidStats) {
           // Convert American odds to implied probability
@@ -1306,7 +1326,8 @@ class NhlWebApiProvider implements NhlDataProvider {
             : Math.abs(odds) / (Math.abs(odds) + 100);
 
           edge = overProbability - impliedProb;
-          console.log(`${player.fullName}: odds=${odds}, impliedProb=${(impliedProb * 100).toFixed(1)}%, overProb=${(overProbability * 100).toFixed(1)}%, edge=${(edge * 100).toFixed(1)}%`);
+          const probSource = usingSportsbookImplied ? 'sportsbook-implied' : 'NHL-stats';
+          console.log(`${player.fullName}: odds=${odds}, impliedProb=${(impliedProb * 100).toFixed(1)}%, overProb=${(overProbability * 100).toFixed(1)}%, edge=${(edge * 100).toFixed(1)}% (${probSource})`);
         } else {
           if (!hasValidOdds) {
             console.log(`${player.fullName}: No valid odds (odds=${odds}), edge=null`);
@@ -1317,7 +1338,8 @@ class NhlWebApiProvider implements NhlDataProvider {
         }
 
         const { confidenceFromEdge } = await import("../models/confidence");
-        const confidence = (edge !== null && hasValidStats) ? confidenceFromEdge(edge, seasonGames) : null;
+        // Allow confidence calculation even with sportsbook-implied stats, but not if probability is 0
+        const confidence = (edge !== null && overProbability > 0) ? confidenceFromEdge(edge, seasonGames) : null;
 
         return {
           id: `${player.id}-anytime-goal`,
@@ -1341,7 +1363,7 @@ class NhlWebApiProvider implements NhlDataProvider {
           underProbability,
           edge,
           confidence,
-          source: matchingOdds?.bookmaker ?? null,
+          source: usingSportsbookImplied ? `${matchingOdds?.bookmaker ?? 'Parlay'} (implied)` : (matchingOdds?.bookmaker ?? null),
         };
       })
     );
@@ -1591,7 +1613,8 @@ class NhlWebApiProvider implements NhlDataProvider {
   async getSnipes() {
     try {
       const props = await this.getProps();
-      // Return top props as snipes (any with valid edge > 0)
+      // Return top props as snipes (any with valid edge > 0 and probability > 0)
+      // This includes both NHL stats and sportsbook-implied probabilities
       const snipes = props.filter(p => p.edge !== null && p.edge > 0 && p.overProbability > 0).slice(0, 10);
       
       // Map props to snipes schema format
@@ -1665,7 +1688,7 @@ class NhlWebApiProvider implements NhlDataProvider {
             provider: this.name,
             lastUpdated: new Date().toISOString(),
             message: games.length > 0
-              ? `Official NHL schedule, including preseason when available, standings, roster and player data is available. ${THERUNDOWN_API_KEY ? "Sportsbook odds are connected via TheRundown. Player props via Parlay API." : "Sportsbook odds are not configured."} Model feed is not configured.`
+              ? `Official NHL schedule, roster and player data is available. ${THERUNDOWN_API_KEY ? "Sportsbook odds are connected via TheRundown. Player props via Parlay API." : "Sportsbook odds are not configured."} ${THERUNDOWN_API_KEY ? " When NHL player stats are unavailable, sportsbook-implied probability is used as fallback." : ""} Model feed is not configured.`
               : `Official NHL data is connected, but no verified games were returned for today's NHL date. ${INCLUDE_PRESEASON ? "Preseason is included when the provider publishes it." : `Preseason is excluded before ${NHL_SEASON_START_DATE}.`} ${THERUNDOWN_API_KEY ? "Sportsbook odds are connected via TheRundown when markets are posted. Player props via Parlay API." : "Sportsbook odds are not configured."} Model feed is not configured.`,
           },
           games: games.length,
@@ -1684,9 +1707,9 @@ class NhlWebApiProvider implements NhlDataProvider {
             lastUpdated: new Date().toISOString(),
             message: "Dashboard parsing error"
           },
-          games: games.length,
-          snipes: snipes.length,
-          playersAnalyzed: players.length,
+          games: 0,
+          snipes: 0,
+          playersAnalyzed: 0,
           topConfidence: null,
           modelVersion: "data-only",
           marketPerformance: [],
