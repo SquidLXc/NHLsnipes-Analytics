@@ -613,7 +613,11 @@ class NhlWebApiProvider implements NhlDataProvider {
 
           console.log(`Fetched ${response.length} NHL player props from Parlay API`);
           // Debug: Log raw sample props to see actual structure
-          console.log(`Raw sample Parlay props:`, JSON.stringify(response.slice(0, 2), null, 2));
+          console.log(`Raw sample Parlay props:`, JSON.stringify(response.slice(0, 3), null, 2));
+          // Log all keys in the first prop to see available fields
+          if (response.length > 0) {
+            console.log(`Available fields in Parlay response:`, Object.keys(response[0]));
+          }
           parlayPropsCache = { expiresAt: Date.now() + 600_000, data: response }; // 10 minute cache
           return response;
         } catch (error) {
@@ -1130,28 +1134,8 @@ class NhlWebApiProvider implements NhlDataProvider {
             seasonShotsPerGame = (seasonStats.shots || seasonStats.sog || 0) / seasonGames;
             seasonPointsPerGame = (seasonStats.points || 0) / seasonGames;
           } else {
-            // Fallback to position-based ranges with player ID variation
-            const playerIdHash = parseInt(player.id) % 100;
-            const position = player.position;
-
-            // Position-based goal per game ranges (min/max for realistic distribution)
-            const positionRanges: Record<string, { minGPG: number; maxGPG: number; minSPPG: number; maxSPPG: number }> = {
-              'C': { minGPG: 0.10, maxGPG: 0.50, minSPPG: 1.5, maxSPPG: 4.0 },
-              'L': { minGPG: 0.08, maxGPG: 0.42, minSPPG: 1.3, maxSPPG: 3.5 },
-              'R': { minGPG: 0.08, maxGPG: 0.42, minSPPG: 1.3, maxSPPG: 3.5 },
-              'D': { minGPG: 0.02, maxGPG: 0.18, minSPPG: 0.8, maxSPPG: 2.2 },
-              'G': { minGPG: 0.00, maxGPG: 0.05, minSPPG: 0.05, maxSPPG: 0.3 },
-            };
-
-            const range = positionRanges[position] || positionRanges['C'];
-
-            // Map player ID hash to a value between 0 and 1 for better distribution
-            const hashNormalized = playerIdHash / 100;
-
-            // Use hash to interpolate within the position range
-            seasonGoalsPerGame = range.minGPG + (range.maxGPG - range.minGPG) * hashNormalized;
-            seasonShotsPerGame = range.minSPPG + (range.maxSPPG - range.minSPPG) * hashNormalized;
-            seasonPointsPerGame = Math.max(0.1, seasonGoalsPerGame * 2 + seasonShotsPerGame * 0.1);
+            // Skip players without real stats - don't use synthetic values
+            return null;
           }
 
           // Calculate probability based on goals per game
@@ -1187,17 +1171,22 @@ class NhlWebApiProvider implements NhlDataProvider {
         const odds = matchingOdds?.odds ?? null;
         const line = matchingOdds?.line ?? null;
 
-        // Calculate edge only if we have real odds from TheRundown
+        // Validate odds - reject 0 or invalid values
+        if (odds === 0 || odds === null || odds === undefined) {
+          console.log(`Skipping ${player.fullName}: invalid odds value ${odds}`);
+          return null;
+        }
+
+        // Calculate edge only if we have real odds
         let edge = null;
-        if (odds !== null) {
+        if (odds !== null && odds !== 0) {
           // Convert American odds to implied probability
           const impliedProb = odds > 0
             ? 100 / (odds + 100)
             : Math.abs(odds) / (Math.abs(odds) + 100);
-          
+
           edge = overProbability - impliedProb;
         }
-        // No edge without real odds - this ensures we only show real betting opportunities
 
         const { confidenceFromEdge } = await import("../models/confidence");
         const confidence = confidenceFromEdge(edge, seasonGames);
@@ -1218,7 +1207,7 @@ class NhlWebApiProvider implements NhlDataProvider {
           opponent,
           market: "Anytime Goal Scorer",
           line,
-          lineStatus: odds !== null ? ("available" as const) : ("unavailable" as const),
+          lineStatus: odds !== null && odds !== 0 ? ("available" as const) : ("unavailable" as const),
           modelProjection: seasonGoalsPerGame,
           overProbability,
           underProbability,
@@ -1240,12 +1229,15 @@ class NhlWebApiProvider implements NhlDataProvider {
     // Filter out nulls and sort by edge
     const validProps = props.filter((p): p is NonNullable<typeof p> => p !== null);
     validProps.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
-    
+
+    const propsWithRealOdds = validProps.filter(p => p.lineStatus === 'available');
+    const propsWithoutOdds = validProps.filter(p => p.lineStatus === 'unavailable');
+
     console.log(`=== Props Summary ===`);
     console.log(`Total players processed: ${relevantPlayers.length}`);
-    console.log(`Players with matched odds: ${matchedPlayersCount}`);
-    console.log(`Props with real odds: ${validProps.filter(p => p.lineStatus === 'available').length}`);
-    console.log(`Props without odds: ${validProps.filter(p => p.lineStatus === 'unavailable').length}`);
+    console.log(`Players with matched odds in map: ${matchedPlayersCount}`);
+    console.log(`Props with valid real odds: ${propsWithRealOdds.length}`);
+    console.log(`Props without valid odds: ${propsWithoutOdds.length}`);
 
     try {
       return GetPropsResponse.parse(validProps);
