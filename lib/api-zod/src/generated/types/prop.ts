@@ -29,4 +29,6 @@ export interface Prop {
   confidence: string | null;
   /** @nullable */
   source: string | null;
+  /** @nullable */
+  odds: number | null;
 }

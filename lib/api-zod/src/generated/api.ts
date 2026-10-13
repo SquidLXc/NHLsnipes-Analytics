@@ -570,7 +570,8 @@ export const GetPropsResponseItem = zod.object({
   "underProbability": zod.number().nullable(),
   "edge": zod.number().nullable(),
   "confidence": zod.string().nullable(),
-  "source": zod.string().nullable()
+  "source": zod.string().nullable(),
+  "odds": zod.number().nullable()
 })
 export const GetPropsResponse = zod.array(GetPropsResponseItem)
 

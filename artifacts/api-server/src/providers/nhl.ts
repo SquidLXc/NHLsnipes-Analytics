@@ -1317,6 +1317,12 @@ class NhlWebApiProvider implements NhlDataProvider {
         // Don't skip players with invalid odds - just mark them as unavailable
         const hasValidOdds = odds !== null && odds !== 0 && odds !== undefined && !isNaN(odds);
 
+        // Debug logging for players with odds issues
+        if (player.fullName === 'Nicolas Deslauriers' || player.fullName === 'Mark Jankowski' ||
+            player.fullName === 'Jesperi Kotkaniemi' || player.fullName === 'Eric Robinson') {
+          console.log(`DEBUG ${player.fullName}: matchedOdds=${matchingOdds ? 'YES' : 'NO'}, odds=${odds}, line=${line}, hasValidOdds=${hasValidOdds}`);
+        }
+
         // Calculate edge if we have valid odds AND valid probability (either NHL stats or sportsbook-implied)
         let edge = null;
         if (hasValidOdds && hasValidStats) {
@@ -1356,7 +1362,7 @@ class NhlWebApiProvider implements NhlDataProvider {
           },
           opponent,
           market: "Anytime Goal Scorer",
-          line,
+          line, // This is the bet line (e.g., 0 for anytime goal, +6.5 for totals)
           lineStatus: hasValidOdds ? ("available" as const) : ("unavailable" as const),
           modelProjection: seasonGoalsPerGame,
           overProbability,
@@ -1364,6 +1370,7 @@ class NhlWebApiProvider implements NhlDataProvider {
           edge,
           confidence,
           source: usingSportsbookImplied ? `${matchingOdds?.bookmaker ?? 'Parlay'} (implied)` : (matchingOdds?.bookmaker ?? null),
+          odds, // Add the actual odds/price (e.g., +2200, -150)
         };
       })
     );
@@ -1580,8 +1587,13 @@ class NhlWebApiProvider implements NhlDataProvider {
       }> = [];
 
       for (const prop of parlayProps) {
+        // Filter to only anytime goal scorer market
+        if (prop.market_key !== 'player_anytime_goal') {
+          continue;
+        }
+
         // Add over price if available
-        if (prop.over_price !== null) {
+        if (prop.over_price !== null && prop.over_price !== 0) {
           playerProps.push({
             playerName: prop.player,
             market: prop.market,
@@ -1592,7 +1604,7 @@ class NhlWebApiProvider implements NhlDataProvider {
         }
 
         // Add under price if available
-        if (prop.under_price !== null) {
+        if (prop.under_price !== null && prop.under_price !== 0) {
           playerProps.push({
             playerName: prop.player,
             market: prop.market,
@@ -1602,6 +1614,10 @@ class NhlWebApiProvider implements NhlDataProvider {
           });
         }
       }
+
+      console.log(`=== getPlayerPropsOdds Normalization ===`);
+      console.log(`Total anytime-goal props from Parlay: ${playerProps.length}`);
+      console.log(`Sample props:`, playerProps.slice(0, 5).map(p => `${p.playerName} @ ${p.odds} (${p.bookmaker})`));
 
       return playerProps;
     } catch (error) {

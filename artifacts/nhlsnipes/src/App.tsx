@@ -490,10 +490,11 @@ function PropsPage() {
 
 function TopEdgeCard({ prop, rank }: { prop: Prop; rank: number }) {
   const available = prop.lineStatus === 'available';
-  const americanOdds = prop.line !== null ? (prop.line > 0 ? `+${Math.round(prop.line)}` : Math.round(prop.line).toString()) : '—';
+  // Use prop.odds for the American odds price, not prop.line (which is the bet line)
+  const americanOdds = prop.odds !== null ? (prop.odds > 0 ? `+${Math.round(prop.odds)}` : Math.round(prop.odds).toString()) : '—';
   // Strip "(implied)" suffix for cleaner display
   const sourceLabel = prop.source ? prop.source.replace(' (implied)', '') : '—';
-  
+
   return (
     <div data-testid={`card-top-edge-${prop.id}`} className="grid gap-4 rounded-lg border-2 border-primary/20 bg-card p-4 transition-all hover:border-primary/40 hover:shadow-lg md:grid-cols-[auto_1.5fr_1fr_1fr_1fr_auto] md:items-center">
       <div className="flex items-center justify-center">
@@ -501,7 +502,7 @@ function TopEdgeCard({ prop, rank }: { prop: Prop; rank: number }) {
           #{rank}
         </div>
       </div>
-      
+
       <div className="flex items-center gap-3">
         <PlayerImage player={prop.player} size="md" />
         <div>
@@ -513,13 +514,13 @@ function TopEdgeCard({ prop, rank }: { prop: Prop; rank: number }) {
           </p>
         </div>
       </div>
-      
+
       <div>
         <p className="font-mono text-[10px] uppercase text-muted-foreground">AI Probability</p>
         <p className="mt-1 text-xl font-bold text-primary">{pct(prop.overProbability)}</p>
         <p className="text-[9px] text-muted-foreground">to score a goal</p>
       </div>
-      
+
       <div>
         <p className="font-mono text-[10px] uppercase text-muted-foreground">Sportsbook Odds</p>
         <p className={`mt-1 text-xl font-bold ${available ? 'text-foreground' : 'text-muted-foreground'}`}>
@@ -527,13 +528,13 @@ function TopEdgeCard({ prop, rank }: { prop: Prop; rank: number }) {
         </p>
         <p className="text-[9px] text-muted-foreground">{available ? sourceLabel : 'not available'}</p>
       </div>
-      
+
       <div>
         <p className="font-mono text-[10px] uppercase text-muted-foreground">Edge</p>
         <p className="mt-1 text-2xl font-bold text-accent">{pct(prop.edge)}</p>
         <p className="text-[9px] text-muted-foreground">model advantage</p>
       </div>
-      
+
       <div className="flex flex-col gap-2 md:items-end">
         <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${
           prop.confidence === 'ELITE' ? 'border-accent/40 bg-accent/10 text-accent' :
@@ -550,7 +551,8 @@ function TopEdgeCard({ prop, rank }: { prop: Prop; rank: number }) {
 
 function PropCard({ prop }: { prop: Prop }) {
   const available = prop.lineStatus === 'available';
-  const americanOdds = prop.line !== null ? (prop.line > 0 ? `+${Math.round(prop.line)}` : Math.round(prop.line).toString()) : '—';
+  // Use prop.odds for the American odds price, not prop.line (which is the bet line)
+  const americanOdds = prop.odds !== null ? (prop.odds > 0 ? `+${Math.round(prop.odds)}` : Math.round(prop.odds).toString()) : '—';
   // Strip "(implied)" suffix for cleaner display
   const sourceLabel = prop.source ? prop.source.replace(' (implied)', '') : '—';
 
