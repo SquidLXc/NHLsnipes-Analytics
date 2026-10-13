@@ -703,13 +703,53 @@ class NhlWebApiProvider implements NhlDataProvider {
 
       console.log(`loadPlayers: Loaded ${rosters.flat().length} players from rosters`);
 
-      // Skip individual player stats fetching - it's causing 35+ API calls per load
-      // Just return players with basic roster info for now
-      console.log(`loadPlayers: Skipping stats fetch to avoid timeouts - returning ${rosters.flat().length} players without detailed stats`);
+      // Fetch stats for players - needed for prop calculations
+      // Process in small batches with 10s timeout per batch to avoid timeouts
+      const batchSize = 10;
+      const playersWithStats: any[] = [];
+      let statsLogCount = 0;
+
+      for (let i = 0; i < rosters.flat().length; i += batchSize) {
+        const batch = rosters.flat().slice(i, i + batchSize);
+        const batchResults = await Promise.all(
+          batch.map(async (player) => {
+            try {
+              // Try landing endpoint with short timeout
+              let stats: any = null;
+              try {
+                const landingStats = await this.fetchJson<{ skaterStats?: any; goalieStats?: any }>(
+                  `player/${player.id}/landing`,
+                );
+                stats = landingStats.skaterStats?.regular?.[0] || landingStats.goalieStats?.regular?.[0];
+                if (stats && statsLogCount < 3) {
+                  console.log(`Got stats for ${player.fullName}:`, stats);
+                  statsLogCount++;
+                }
+              } catch (e) {
+                // Silently fail - player will have null stats
+              }
+
+              return {
+                ...player,
+                seasonStats: stats || null,
+              };
+            } catch {
+              return {
+                ...player,
+                seasonStats: null,
+              };
+            }
+          })
+        );
+        playersWithStats.push(...batchResults);
+      }
+
+      const playersWithStatsCount = playersWithStats.filter(p => p.seasonStats && p.seasonStats.goals > 0).length;
+      console.log(`loadPlayers: ${playersWithStatsCount} players with actual stats, ${playersWithStats.length - playersWithStatsCount} without stats`);
 
       try {
         playersCache = GetPlayersResponse.parse(
-          Array.from(new Map(rosters.flat().map((player) => [player.id, player])).values()),
+          Array.from(new Map(playersWithStats.map((player) => [player.id, player])).values()),
         );
       } catch (error) {
         console.error("Failed to parse players response:", error);
