@@ -1164,37 +1164,48 @@ class NhlWebApiProvider implements NhlDataProvider {
           const opponent = opponentByTeam.get(player.team.id);
           if (!opponent) return null;
 
-          // Use actual season stats if available, otherwise use position-based fallback
+          // Use actual season stats if available, otherwise mark probability as unavailable
           const seasonStats = (player as any).seasonStats;
           const seasonGames = Math.max(1, seasonStats?.games || seasonStats?.game || 1);
 
           let seasonGoalsPerGame, seasonShotsPerGame, seasonPointsPerGame;
+          let hasValidStats = false;
 
           if (seasonStats && (seasonStats.goals > 0 || seasonStats.goals === 0)) {
             // Use actual stats (handle different field names from different endpoints)
             seasonGoalsPerGame = (seasonStats.goals || 0) / seasonGames;
             seasonShotsPerGame = (seasonStats.shots || seasonStats.sog || 0) / seasonGames;
             seasonPointsPerGame = (seasonStats.points || 0) / seasonGames;
+            hasValidStats = true;
             console.log(`${player.fullName}: Using real stats - GPG=${seasonGoalsPerGame.toFixed(3)}, games=${seasonGames}`);
           } else {
-            // No stats available - use conservative baseline for calculation
-            seasonGoalsPerGame = 0.1; // Conservative baseline
-            seasonShotsPerGame = 1.0;
-            seasonPointsPerGame = 0.2;
-            console.log(`${player.fullName}: No season stats, using baseline values`);
+            // No stats available - do NOT use baseline, mark as unavailable
+            seasonGoalsPerGame = 0;
+            seasonShotsPerGame = 0;
+            seasonPointsPerGame = 0;
+            console.log(`${player.fullName}: No season stats available, probability will be unavailable`);
           }
 
-          // Calculate probability based on goals per game
-          const baseProbability = seasonGoalsPerGame * 1.5;
-          const minProbability = 0.03;
-          const maxProbability = 0.70;
-          const overProbability = Math.min(maxProbability, Math.max(minProbability, baseProbability));
-          const underProbability = 1 - overProbability;
-          const modelProjection = seasonGoalsPerGame;
+          // Calculate probability based on goals per game ONLY if stats are valid
+          let overProbability, underProbability, modelProjection;
+          if (hasValidStats) {
+            const baseProbability = seasonGoalsPerGame * 1.5;
+            const minProbability = 0.03;
+            const maxProbability = 0.70;
+            overProbability = Math.min(maxProbability, Math.max(minProbability, baseProbability));
+            underProbability = 1 - overProbability;
+            modelProjection = seasonGoalsPerGame;
+          } else {
+            // No valid stats - probability unavailable
+            overProbability = 0;
+            underProbability = 0;
+            modelProjection = 0;
+          }
 
           // Debug logging for specific players with issues
           if (player.fullName === 'Nikolas Matinpalo' || player.fullName === 'Parker Wotherspoon' || player.fullName === 'Zach Metsa') {
-            console.log(`DEBUG ${player.fullName}: GPG=${seasonGoalsPerGame.toFixed(3)}, baseProb=${baseProbability.toFixed(3)}, overProb=${(overProbability * 100).toFixed(1)}%`);
+            const baseProb = hasValidStats ? seasonGoalsPerGame * 1.5 : 0;
+            console.log(`DEBUG ${player.fullName}: GPG=${seasonGoalsPerGame.toFixed(3)}, hasValidStats=${hasValidStats}, baseProb=${baseProb.toFixed(3)}, overProb=${(overProbability * 100).toFixed(1)}%`);
           }
 
         // Find matching odds for this player using the map
@@ -1226,9 +1237,9 @@ class NhlWebApiProvider implements NhlDataProvider {
         // Don't skip players with invalid odds - just mark them as unavailable
         const hasValidOdds = odds !== null && odds !== 0 && odds !== undefined && !isNaN(odds);
 
-        // Calculate edge only if we have real valid odds
+        // Calculate edge ONLY if we have BOTH valid odds AND valid probability
         let edge = null;
-        if (hasValidOdds) {
+        if (hasValidOdds && hasValidStats) {
           // Convert American odds to implied probability
           const impliedProb = odds > 0
             ? 100 / (odds + 100)
@@ -1237,11 +1248,16 @@ class NhlWebApiProvider implements NhlDataProvider {
           edge = overProbability - impliedProb;
           console.log(`${player.fullName}: odds=${odds}, impliedProb=${(impliedProb * 100).toFixed(1)}%, overProb=${(overProbability * 100).toFixed(1)}%, edge=${(edge * 100).toFixed(1)}%`);
         } else {
-          console.log(`${player.fullName}: No valid odds (odds=${odds}), edge=null`);
+          if (!hasValidOdds) {
+            console.log(`${player.fullName}: No valid odds (odds=${odds}), edge=null`);
+          }
+          if (!hasValidStats) {
+            console.log(`${player.fullName}: No valid stats, edge=null`);
+          }
         }
 
         const { confidenceFromEdge } = await import("../models/confidence");
-        const confidence = edge !== null ? confidenceFromEdge(edge, seasonGames) : null;
+        const confidence = (edge !== null && hasValidStats) ? confidenceFromEdge(edge, seasonGames) : null;
 
         return {
           id: `${player.id}-anytime-goal`,
@@ -1515,8 +1531,8 @@ class NhlWebApiProvider implements NhlDataProvider {
   async getSnipes() {
     try {
       const props = await this.getProps();
-      // Return top props as snipes (any with edge > 0)
-      const snipes = props.filter(p => p.edge !== null && p.edge > 0).slice(0, 10);
+      // Return top props as snipes (any with valid edge > 0)
+      const snipes = props.filter(p => p.edge !== null && p.edge > 0 && p.overProbability > 0).slice(0, 10);
       
       // Map props to snipes schema format
       const snipesMapped = snipes.map(p => ({
