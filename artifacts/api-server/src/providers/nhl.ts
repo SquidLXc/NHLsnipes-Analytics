@@ -697,79 +697,13 @@ class NhlWebApiProvider implements NhlDataProvider {
 
       console.log(`loadPlayers: Loaded ${rosters.flat().length} players from rosters`);
 
-      // Fetch current season stats for all players (with concurrency limit to avoid timeouts)
-      // Process in batches to avoid overwhelming the API
-      const batchSize = 20;
-      const playersWithStats: any[] = [];
-      let statsLogCount = 0;
-      for (let i = 0; i < rosters.flat().length; i += batchSize) {
-        const batch = rosters.flat().slice(i, i + batchSize);
-        const batchResults = await Promise.all(
-          batch.map(async (player) => {
-            try {
-              // Try different NHL API endpoints for stats
-              let stats: any = null;
-
-              // Try landing endpoint first
-              try {
-                const landingStats = await this.fetchJson<{ skaterStats?: any; goalieStats?: any }>(
-                  `player/${player.id}/landing`,
-                );
-                stats = landingStats.skaterStats?.regular?.[0] || landingStats.goalieStats?.regular?.[0];
-                if (stats && (stats.goals > 0 || stats.goals === 0) && statsLogCount < 5) {
-                  console.log(`Got stats from landing endpoint for ${player.fullName}:`, stats);
-                  statsLogCount++;
-                }
-              } catch (e) {
-                // Silently fail for landing endpoint
-              }
-
-              // If landing didn't work, try stats endpoint
-              if (!stats) {
-                try {
-                  const statsData = await this.fetchJson<{ stats?: any[] }>(
-                    `player/${player.id}/stats`,
-                  );
-                  // Look for current season regular season stats
-                  if (statsData.stats && statsData.stats.length > 0) {
-                    const currentSeason = statsData.stats.find((s: any) =>
-                      s.type?.displayName === 'regular' &&
-                      (s.season || s.seasonId)?.toString().startsWith('202')
-                    );
-                    if (currentSeason && currentSeason.splits && currentSeason.splits.length > 0) {
-                      stats = currentSeason.splits[0].stat;
-                      if (statsLogCount < 5) {
-                        console.log(`Got stats from stats endpoint for ${player.fullName}:`, stats);
-                        statsLogCount++;
-                      }
-                    }
-                  }
-                } catch (e) {
-                  // Silently fail for stats endpoint
-                }
-              }
-
-              return {
-                ...player,
-                seasonStats: stats || null,
-              };
-            } catch {
-              return {
-                ...player,
-                seasonStats: null,
-              };
-            }
-          })
-        );
-        playersWithStats.push(...batchResults);
-      }
-
-      const playersWithStatsCount = playersWithStats.filter(p => p.seasonStats && p.seasonStats.goals > 0).length;
-      console.log(`loadPlayers: ${playersWithStatsCount} players with actual stats, ${playersWithStats.length - playersWithStatsCount} without stats`);
+      // Skip individual player stats fetching - it's causing 35+ API calls per load
+      // Just return players with basic roster info for now
+      console.log(`loadPlayers: Skipping stats fetch to avoid timeouts - returning ${rosters.flat().length} players without detailed stats`);
 
       try {
         playersCache = GetPlayersResponse.parse(
-          Array.from(new Map(playersWithStats.map((player) => [player.id, player])).values()),
+          Array.from(new Map(rosters.flat().map((player) => [player.id, player])).values()),
         );
       } catch (error) {
         console.error("Failed to parse players response:", error);
@@ -952,30 +886,30 @@ class NhlWebApiProvider implements NhlDataProvider {
   }
 
   async getMatchup(gameId: string) {
-    const game = await this.getGame(gameId);
-    if (!game) return null;
-    const loadRosterStats = async (team: NormalizedTeam) => {
-      const roster = await this.getPlayers(undefined, team.abbreviation);
-      return Promise.all(
-        roster.map(async (player) => {
-          try {
-            const detail = await this.getPlayer(player.id);
-            return { ...player, seasonStats: detail?.seasonStats ?? null };
-          } catch {
-            return { ...player, seasonStats: null };
-          }
-        }),
-      );
-    };
-    const [awayPlayers, homePlayers] = await Promise.all([
-      loadRosterStats(game.awayTeam),
-      loadRosterStats(game.homeTeam),
-    ]);
-    return GetMatchupResponse.parse({
-      game,
-      away: { team: game.awayTeam, players: awayPlayers },
-      home: { team: game.homeTeam, players: homePlayers },
-    });
+    try {
+      console.log(`getMatchup: Fetching game ${gameId}`);
+      const game = await this.getGame(gameId);
+      if (!game) {
+        console.error(`getMatchup: Game ${gameId} not found`);
+        return null;
+      }
+
+      console.log(`getMatchup: Fetching rosters for ${game.awayTeam.abbreviation} and ${game.homeTeam.abbreviation}`);
+      // Use loadPlayers() which already has cached data - no need to call getPlayer() for each player
+      const allPlayers = await this.loadPlayers();
+      const awayPlayers = allPlayers.filter(p => p.team.abbreviation === game.awayTeam.abbreviation);
+      const homePlayers = allPlayers.filter(p => p.team.abbreviation === game.homeTeam.abbreviation);
+
+      console.log(`getMatchup: ${awayPlayers.length} away players, ${homePlayers.length} home players`);
+      return GetMatchupResponse.parse({
+        game,
+        away: { team: game.awayTeam, players: awayPlayers },
+        home: { team: game.homeTeam, players: homePlayers },
+      });
+    } catch (error) {
+      console.error(`getMatchup error for game ${gameId}:`, error);
+      return null;
+    }
   }
 
   async getPlayers(search?: string, team?: string) {
