@@ -32,6 +32,7 @@ const nav = [
   { href: '/', label: 'Overview', icon: Gauge },
   { href: '/snipes', label: 'Snipes', icon: Target, hot: true },
   { href: '/props', label: 'Prop board', icon: BarChart3 },
+  { href: '/slip-builder', label: 'Slip builder', icon: Zap },
   { href: '/matchups', label: 'Matchups', icon: Trophy },
   { href: '/goalies', label: 'Goalie lab', icon: Shield },
   { href: '/players', label: 'Players', icon: Users },
@@ -47,6 +48,64 @@ function fmt(value: number | null | undefined, suffix = '') {
 function pct(value: number | null | undefined) {
   if (value === null || value === undefined) return '—';
   return `${(value * 100).toFixed(1)}%`;
+}
+
+function americanOddsToDecimal(odds: number): number {
+  if (odds > 0) {
+    return (odds + 100) / 100;
+  } else {
+    return (Math.abs(odds) + 100) / Math.abs(odds);
+  }
+}
+
+function formatAmericanOdds(odds: number): string {
+  if (odds > 0) return `+${odds}`;
+  return odds.toString();
+}
+
+// Slip builder types
+interface SlipPick {
+  id: string;
+  playerId: string;
+  playerName: string;
+  playerTeam: string;
+  opponent: string;
+  market: string;
+  odds: number;
+  line: number | null;
+  source: string | null;
+  confidence: string | null;
+  overProbability: number | null;
+  edge: number | null;
+}
+
+interface SlipState {
+  picks: SlipPick[];
+  mode: 'single' | 'parlay';
+  stake: number;
+  selectedSportsbook: string | null;
+}
+
+const SLIP_STORAGE_KEY = 'nhlsnipes-slip';
+
+function getSlipFromStorage(): SlipState {
+  try {
+    const stored = localStorage.getItem(SLIP_STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.error('Failed to parse slip from storage:', e);
+  }
+  return { picks: [], mode: 'parlay', stake: 10, selectedSportsbook: null };
+}
+
+function saveSlipToStorage(slip: SlipState) {
+  try {
+    localStorage.setItem(SLIP_STORAGE_KEY, JSON.stringify(slip));
+  } catch (e) {
+    console.error('Failed to save slip to storage:', e);
+  }
 }
 function shortDate(value: string | null | undefined) {
   if (!value) return 'Date unavailable';
@@ -101,6 +160,18 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const feedLabel = dataHealth.isLoading ? 'DATA FEED CHECKING' : dataHealth.data?.lastSuccessfulSync ? 'DATA CURRENT' : dataHealth.data?.connection === 'connected' ? 'SYNC REQUIRED' : 'DATA FEED OFFLINE';
   const { data: liveAlerts, isLoading: alertsLoading } = useGetLiveAlerts({ query: { queryKey: getGetLiveAlertsQueryKey() } });
 
+  // Slip count for badge
+  const [slipCount, setSlipCount] = useState(() => getSlipFromStorage().picks.length);
+
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setSlipCount(getSlipFromStorage().picks.length);
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
   // Close notifications when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -118,7 +189,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
   return <div className="min-h-[100dvh] bg-background">
     <aside className={`fixed inset-y-0 left-0 z-40 flex w-[244px] flex-col border-r border-sidebar-border bg-sidebar transition-transform md:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
       <div className="flex h-[76px] items-center border-b border-sidebar-border px-6"><Link data-testid="link-brand" href="/" className="flex items-center gap-3"><span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-primary text-primary-foreground"><Zap size={16} fill="currentColor" /></span><span><span className="block font-mono text-[14px] font-medium tracking-[-.04em] text-foreground">NHL<span className="text-primary">snipes</span></span><span className="mt-0.5 block font-mono text-[8px] tracking-[.08em] text-muted-foreground">build by SquidLxc</span></span></Link></div>
-      <nav className="flex-1 space-y-1 px-3 py-5">{nav.map((item) => { const Icon = item.icon; const active = location === item.href || (item.href !== '/' && location.startsWith(item.href)); return <Link data-testid={`link-nav-${item.label.toLowerCase().replace(/\s/g, '-')}`} href={item.href} key={item.href} onClick={() => setOpen(false)} className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-[12px] font-semibold transition-colors ${active ? 'bg-primary/10 text-primary' : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground'}`}><Icon size={16} strokeWidth={active ? 2.4 : 1.7} /><span>{item.label}</span>{item.hot && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_12px_hsl(var(--accent))]" />}</Link> })}</nav>
+      <nav className="flex-1 space-y-1 px-3 py-5">{nav.map((item) => { const Icon = item.icon; const active = location === item.href || (item.href !== '/' && location.startsWith(item.href)); const isSlipBuilder = item.href === '/slip-builder'; return <Link data-testid={`link-nav-${item.label.toLowerCase().replace(/\s/g, '-')}`} href={item.href} key={item.href} onClick={() => setOpen(false)} className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-[12px] font-semibold transition-colors ${active ? 'bg-primary/10 text-primary' : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground'}`}><Icon size={16} strokeWidth={active ? 2.4 : 1.7} /><span>{item.label}</span>{item.hot && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_12px_hsl(var(--accent))]" />}{isSlipBuilder && slipCount > 0 && <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">{slipCount}</span>}</Link> })}</nav>
       <div className="border-t border-sidebar-border p-4">
         <div className="mb-4 space-y-2">
           <p className="px-3 text-[10px] font-mono uppercase tracking-[.12em] text-muted-foreground">Join Community</p>
@@ -495,6 +566,52 @@ function TopEdgeCard({ prop, rank }: { prop: Prop; rank: number }) {
   // Strip "(implied)" suffix for cleaner display
   const sourceLabel = prop.source ? prop.source.replace(' (implied)', '') : '—';
 
+  const [isInSlip, setIsInSlip] = useState(() => {
+    const currentSlip = getSlipFromStorage();
+    return currentSlip.picks.some(p => p.id === prop.id);
+  });
+
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const currentSlip = getSlipFromStorage();
+      setIsInSlip(currentSlip.picks.some(p => p.id === prop.id));
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [prop.id]);
+
+  const addToSlip = () => {
+    if (!available || prop.odds === null) return;
+
+    const currentSlip = getSlipFromStorage();
+    const newPick: SlipPick = {
+      id: prop.id,
+      playerId: prop.player.id,
+      playerName: prop.player.fullName,
+      playerTeam: prop.player.team.abbreviation,
+      opponent: prop.opponent.abbreviation,
+      market: prop.market,
+      odds: prop.odds,
+      line: prop.line,
+      source: prop.source,
+      confidence: prop.confidence,
+      overProbability: prop.overProbability,
+      edge: prop.edge,
+    };
+
+    if (currentSlip.picks.some(p => p.id === prop.id)) {
+      return;
+    }
+
+    const updatedSlip = {
+      ...currentSlip,
+      picks: [...currentSlip.picks, newPick],
+    };
+    saveSlipToStorage(updatedSlip);
+    setIsInSlip(true);
+  };
+
   return (
     <div data-testid={`card-top-edge-${prop.id}`} className="grid gap-4 rounded-lg border-2 border-primary/20 bg-card p-4 transition-all hover:border-primary/40 hover:shadow-lg md:grid-cols-[auto_1.5fr_1fr_1fr_1fr_auto] md:items-center">
       <div className="flex items-center justify-center">
@@ -544,6 +661,7 @@ function TopEdgeCard({ prop, rank }: { prop: Prop; rank: number }) {
         }`}>
           {prop.confidence || 'WATCH'}
         </span>
+        {available && !isInSlip && <button onClick={addToSlip} className="rounded-lg bg-primary px-3 py-1 text-[10px] font-semibold text-primary-foreground hover:bg-primary/90">Add to Slip</button>}
       </div>
     </div>
   );
@@ -556,7 +674,242 @@ function PropCard({ prop }: { prop: Prop }) {
   // Strip "(implied)" suffix for cleaner display
   const sourceLabel = prop.source ? prop.source.replace(' (implied)', '') : '—';
 
-  return <div data-testid={`card-prop-${prop.id}`} className="grid gap-4 rounded-xl border border-border bg-card/70 p-4 transition-colors hover:border-secondary/40 md:grid-cols-[1.5fr_.9fr_.9fr_.8fr_auto] md:items-center"><div className="flex items-center gap-3"><PlayerImage player={prop.player} size="md" /><div><Link data-testid={`link-prop-player-${prop.player.id}`} href={`/players/${prop.player.id}`} className="text-sm font-bold hover:text-primary">{prop.player.fullName}</Link><p className="mt-1 text-[10px] text-muted-foreground">{prop.player.team.abbreviation} vs {prop.opponent.abbreviation} · {prop.market}</p></div></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">AI Probability</p><p className="mt-1 text-lg font-bold text-primary">{pct(prop.overProbability)}</p></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">Sportsbook Odds</p><p className={`mt-1 text-lg font-bold ${available ? 'text-foreground' : 'text-muted-foreground'}`}>{available ? americanOdds : 'N/A'}</p><p className="text-[9px] text-muted-foreground">{available ? sourceLabel : 'not available'}</p></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">Edge</p><p className={`mt-1 text-lg font-bold ${prop.edge && prop.edge > 0 ? 'text-accent' : 'text-muted-foreground'}`}>{pct(prop.edge)}</p></div><div className="flex items-center gap-2 md:justify-end"><span className={`rounded-full border px-2 py-1 text-[9px] uppercase tracking-wider ${available ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border text-muted-foreground'}`}>{available ? 'live' : 'no odds'}</span><span className={`rounded-full px-2 py-1 text-[9px] uppercase ${prop.confidence === 'ELITE' || prop.confidence === 'STRONG' ? 'bg-accent/10 text-accent' : 'bg-secondary/10 text-secondary'}`}>{prop.confidence || 'watch'}</span></div></div>;
+  const [isInSlip, setIsInSlip] = useState(() => {
+    const currentSlip = getSlipFromStorage();
+    return currentSlip.picks.some(p => p.id === prop.id);
+  });
+
+  // Re-check when storage changes
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const currentSlip = getSlipFromStorage();
+      setIsInSlip(currentSlip.picks.some(p => p.id === prop.id));
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [prop.id]);
+
+  const addToSlip = () => {
+    if (!available || prop.odds === null) return;
+
+    const currentSlip = getSlipFromStorage();
+    const newPick: SlipPick = {
+      id: prop.id,
+      playerId: prop.player.id,
+      playerName: prop.player.fullName,
+      playerTeam: prop.player.team.abbreviation,
+      opponent: prop.opponent.abbreviation,
+      market: prop.market,
+      odds: prop.odds,
+      line: prop.line,
+      source: prop.source,
+      confidence: prop.confidence,
+      overProbability: prop.overProbability,
+      edge: prop.edge,
+    };
+
+    // Check if already in slip
+    if (currentSlip.picks.some(p => p.id === prop.id)) {
+      return; // Already in slip
+    }
+
+    const updatedSlip = {
+      ...currentSlip,
+      picks: [...currentSlip.picks, newPick],
+    };
+    saveSlipToStorage(updatedSlip);
+    setIsInSlip(true);
+  };
+
+  return <div data-testid={`card-prop-${prop.id}`} className="grid gap-4 rounded-xl border border-border bg-card/70 p-4 transition-colors hover:border-secondary/40 md:grid-cols-[1.5fr_.9fr_.9fr_.8fr_auto] md:items-center"><div className="flex items-center gap-3"><PlayerImage player={prop.player} size="md" /><div><Link data-testid={`link-prop-player-${prop.player.id}`} href={`/players/${prop.player.id}`} className="text-sm font-bold hover:text-primary">{prop.player.fullName}</Link><p className="mt-1 text-[10px] text-muted-foreground">{prop.player.team.abbreviation} vs {prop.opponent.abbreviation} · {prop.market}</p></div></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">AI Probability</p><p className="mt-1 text-lg font-bold text-primary">{pct(prop.overProbability)}</p></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">Sportsbook Odds</p><p className={`mt-1 text-lg font-bold ${available ? 'text-foreground' : 'text-muted-foreground'}`}>{available ? americanOdds : 'N/A'}</p><p className="text-[9px] text-muted-foreground">{available ? sourceLabel : 'not available'}</p></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">Edge</p><p className={`mt-1 text-lg font-bold ${prop.edge && prop.edge > 0 ? 'text-accent' : 'text-muted-foreground'}`}>{pct(prop.edge)}</p></div><div className="flex items-center gap-2 md:justify-end"><span className={`rounded-full border px-2 py-1 text-[9px] uppercase tracking-wider ${available ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border text-muted-foreground'}`}>{available ? 'live' : 'no odds'}</span><span className={`rounded-full px-2 py-1 text-[9px] uppercase ${prop.confidence === 'ELITE' || prop.confidence === 'STRONG' ? 'bg-accent/10 text-accent' : 'bg-secondary/10 text-secondary'}`}>{prop.confidence || 'watch'}</span>{available && !isInSlip && <button onClick={addToSlip} className="rounded-lg bg-primary px-2 py-1 text-[9px] font-semibold text-primary-foreground hover:bg-primary/90">Add</button>}</div></div>;
+}
+
+function SlipBuilderPage() {
+  const [slip, setSlip] = useState<SlipState>(getSlipFromStorage);
+
+  // Listen for storage changes (sync across tabs)
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setSlip(getSlipFromStorage());
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  useEffect(() => {
+    saveSlipToStorage(slip);
+  }, [slip]);
+
+  const clearSlip = () => {
+    setSlip({ picks: [], mode: 'parlay', stake: 10, selectedSportsbook: null });
+  };
+
+  const removePick = (id: string) => {
+    setSlip(prev => ({ ...prev, picks: prev.picks.filter(p => p.id !== id) }));
+  };
+
+  // Calculate combined odds for parlay
+  const combinedDecimalOdds = useMemo(() => {
+    if (slip.picks.length === 0) return 0;
+    return slip.picks.reduce((acc, pick) => acc * americanOddsToDecimal(pick.odds), 1);
+  }, [slip.picks]);
+
+  // Calculate potential return
+  const potentialReturn = useMemo(() => {
+    if (slip.mode === 'single') {
+      return slip.picks.map(pick => ({
+        pickId: pick.id,
+        return: slip.stake * americanOddsToDecimal(pick.odds),
+        profit: slip.stake * americanOddsToDecimal(pick.odds) - slip.stake
+      }));
+    } else {
+      const totalReturn = slip.stake * combinedDecimalOdds;
+      return totalReturn;
+    }
+  }, [slip.mode, slip.stake, slip.picks, combinedDecimalOdds]);
+
+  const allValid = slip.picks.length > 0 && slip.picks.every(p => p.odds > 0 && p.odds !== null);
+
+  return <>
+    <PageHeader
+      eyebrow="Betting Slip"
+      title="Slip Builder"
+      copy="Build and track your betting slips. Add picks from the Prop board, compare odds, and calculate potential returns."
+      action={slip.picks.length > 0 && <button onClick={clearSlip} className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-semibold text-destructive">Clear Slip <X size={14} /></button>}
+    />
+
+    {slip.picks.length === 0 ? (
+      <div className="rounded-xl border border-border bg-card/70 p-12 text-center">
+        <Zap size={48} className="mx-auto mb-4 text-muted-foreground/50" />
+        <h3 className="mb-2 text-lg font-bold">Your slip is empty</h3>
+        <p className="mb-6 text-sm text-muted-foreground">Add picks from the Prop board to start building your slip</p>
+        <Link href="/props" className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Browse Props <ArrowUpRight size={14} /></Link>
+      </div>
+    ) : (
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Picks List */}
+        <div className="lg:col-span-2 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold">Your Picks ({slip.picks.length})</h2>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSlip(prev => ({ ...prev, mode: 'single' }))}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${slip.mode === 'single' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
+              >
+                Single Bets
+              </button>
+              <button
+                onClick={() => setSlip(prev => ({ ...prev, mode: 'parlay' }))}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${slip.mode === 'parlay' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
+              >
+                Parlay
+              </button>
+            </div>
+          </div>
+
+          {slip.picks.map(pick => (
+            <div key={pick.id} className="rounded-xl border border-border bg-card/70 p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                      {pick.playerName.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                    </div>
+                    <div>
+                      <p className="font-bold">{pick.playerName}</p>
+                      <p className="text-[10px] text-muted-foreground">{pick.playerTeam} vs {pick.opponent} · {pick.market}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-4">
+                    <div>
+                      <p className="font-mono text-[9px] uppercase text-muted-foreground">Odds</p>
+                      <p className="font-bold">{formatAmericanOdds(pick.odds)}</p>
+                    </div>
+                    <div>
+                      <p className="font-mono text-[9px] uppercase text-muted-foreground">AI Prob</p>
+                      <p className="font-bold">{pct(pick.overProbability)}</p>
+                    </div>
+                    <div>
+                      <p className="font-mono text-[9px] uppercase text-muted-foreground">Edge</p>
+                      <p className={`font-bold ${pick.edge && pick.edge > 0 ? 'text-accent' : 'text-muted-foreground'}`}>{pct(pick.edge)}</p>
+                    </div>
+                  </div>
+                </div>
+                <button onClick={() => removePick(pick.id)} className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Summary Panel */}
+        <div className="space-y-4">
+          <div className="rounded-xl border border-border bg-card/70 p-6">
+            <h3 className="mb-4 font-bold">Summary</h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-2 block text-xs font-semibold text-muted-foreground">Stake ($)</label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={slip.stake}
+                  onChange={(e) => setSlip(prev => ({ ...prev, stake: parseFloat(e.target.value) || 0 }))}
+                  className="w-full rounded-lg border border-border bg-muted px-3 py-2 text-center font-bold"
+                />
+              </div>
+
+              {slip.mode === 'parlay' && (
+                <div>
+                  <p className="mb-1 text-xs font-semibold text-muted-foreground">Combined Odds</p>
+                  <p className="text-xl font-bold">{formatAmericanOdds(Math.round((combinedDecimalOdds - 1) * 100))}</p>
+                  <p className="text-[10px] text-muted-foreground">{combinedDecimalOdds.toFixed(2)}x decimal</p>
+                </div>
+              )}
+
+              <div className="rounded-lg bg-muted/60 p-4">
+                <p className="mb-1 text-xs font-semibold text-muted-foreground">Potential Return</p>
+                <p className="text-2xl font-bold text-primary">
+                  ${typeof potentialReturn === 'number' ? potentialReturn.toFixed(2) : potentialReturn.reduce((sum, r) => sum + r.return, 0).toFixed(2)}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  Profit: ${typeof potentialReturn === 'number' ? (potentialReturn - slip.stake).toFixed(2) : potentialReturn.reduce((sum, r) => sum + r.profit, 0).toFixed(2)}
+                </p>
+              </div>
+
+              {!allValid && (
+                <div className="rounded-lg bg-destructive/10 p-3 text-center">
+                  <CircleAlert size={16} className="mx-auto mb-1 text-destructive" />
+                  <p className="text-xs text-destructive">Some picks have invalid odds</p>
+                </div>
+              )}
+
+              <div className="rounded-lg bg-secondary/10 p-3 text-center">
+                <Info size={16} className="mx-auto mb-1 text-secondary" />
+                <p className="text-[10px] text-muted-foreground">
+                  Odds provided by {slip.picks[0]?.source || 'sportsbooks'}. Verify with your sportsbook before placing bets.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card/70 p-6">
+            <h3 className="mb-4 font-bold">Info</h3>
+            <div className="space-y-2 text-[10px] text-muted-foreground">
+              <p>• Slip is saved locally in your browser</p>
+              <p>• Clear your browser data to reset</p>
+              <p>• Odds are for informational purposes only</p>
+              <p>• Verify odds with your sportsbook</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+  </>;
 }
 
 function MatchupsPage() {
@@ -745,7 +1098,7 @@ function GameDetailRoute() {
 }
 
 function Router() {
-  return <ErrorBoundary><AppShell><Switch><Route path="/" component={HomeWithLiveAlerts} /><Route path="/snipes" component={SnipesPage} /><Route path="/props" component={PropsPage} /><Route path="/matchups" component={MatchupsPage} /><Route path="/goalies" component={GoaliesPage} /><Route path="/players" component={PlayersPage} /><Route path="/players/:playerId" component={PlayerDetailPage} /><Route path="/teams" component={TeamsPage} /><Route path="/teams/:teamId" component={TeamDetailPage} /><Route path="/watchlist" component={WatchlistPage} /><Route path="/audit" component={AuditPage} /><Route path="/admin" component={AdminPage} /><Route path="/games/:gameId" component={GameDetailRoute} /><Route component={NotFound} /></Switch></AppShell></ErrorBoundary>;
+  return <ErrorBoundary><AppShell><Switch><Route path="/" component={HomeWithLiveAlerts} /><Route path="/snipes" component={SnipesPage} /><Route path="/props" component={PropsPage} /><Route path="/slip-builder" component={SlipBuilderPage} /><Route path="/matchups" component={MatchupsPage} /><Route path="/goalies" component={GoaliesPage} /><Route path="/players" component={PlayersPage} /><Route path="/players/:playerId" component={PlayerDetailPage} /><Route path="/teams" component={TeamsPage} /><Route path="/teams/:teamId" component={TeamDetailPage} /><Route path="/watchlist" component={WatchlistPage} /><Route path="/audit" component={AuditPage} /><Route path="/admin" component={AdminPage} /><Route path="/games/:gameId" component={GameDetailRoute} /><Route component={NotFound} /></Switch></AppShell></ErrorBoundary>;
 }
 
 function App() {
