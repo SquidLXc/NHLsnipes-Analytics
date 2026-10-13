@@ -1595,6 +1595,7 @@ class NhlWebApiProvider implements NhlDataProvider {
     const startedAt = new Date().toISOString();
     syncHealth.lastAttemptedSync = startedAt;
     syncHealth.errors = [];
+    console.log("=== Starting NHL Sync ===");
     try {
       const [teams, currentGames, players, futureGames] = await Promise.all([
         this.getTeams(),
@@ -1602,10 +1603,12 @@ class NhlWebApiProvider implements NhlDataProvider {
         this.getPlayers(),
         this.getFutureGames(),
       ]);
+      console.log(`Sync: Fetched ${teams.length} teams, ${currentGames.length} current games, ${players.length} players, ${futureGames.length} future games`);
       const games = Array.from(new Map([...currentGames, ...futureGames].map((game) => [game.id, game])).values());
       
-      // Only insert into database if configured
+      // Only insert into database if configured - but don't fail sync if DB fails
       if (databaseConfigured) {
+        try {
         await db.insert(teamsTable).values(
           teams.map((team) => ({
             id: team.id,
@@ -1657,14 +1660,24 @@ class NhlWebApiProvider implements NhlDataProvider {
             set: { teamId: playersTable.teamId, fullName: playersTable.fullName, firstName: playersTable.firstName, lastName: playersTable.lastName, position: playersTable.position, jerseyNumber: playersTable.jerseyNumber, headshotUrl: playersTable.headshotUrl, updatedAt: new Date() },
           });
         }
+        console.log("Sync: Database insert successful");
+        } catch (dbError) {
+          console.error("Sync: Database insert failed, but data is in memory cache:", dbError);
+          // Don't fail the sync - data is still available in memory
+        }
+      } else {
+        console.log("Sync: Database not configured, data stored in memory cache only");
       }
-      
+
       const completedAt = new Date().toISOString();
+      console.log(`=== Sync completed successfully: ${teams.length} teams, ${games.length} games, ${players.length} players ===`);
       Object.assign(syncHealth, { connection: "connected", lastSuccessfulSync: completedAt, teamsImported: teams.length, gamesImported: games.length, playersImported: players.length, playerStatsImported: 0, goalieStatsImported: 0 });
       return { provider: this.name, startedAt, completedAt, teamsImported: teams.length, gamesImported: games.length, playersImported: players.length, playerStatsImported: 0, goalieStatsImported: 0, errors: [] };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown synchronization error";
-      console.error("Sync failed:", message);
+      console.error("=== Sync failed ===");
+      console.error("Error:", message);
+      console.error("Full error:", error);
       syncHealth.connection = "error";
       syncHealth.errors = [message];
       syncHealth.lastSuccessfulSync = null; // Clear on error
