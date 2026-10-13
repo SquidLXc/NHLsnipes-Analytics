@@ -704,29 +704,55 @@ class NhlWebApiProvider implements NhlDataProvider {
       console.log(`loadPlayers: Loaded ${rosters.flat().length} players from rosters`);
 
       // Fetch stats for players - needed for prop calculations
-      // Process in small batches with 10s timeout per batch to avoid timeouts
-      const batchSize = 10;
+      // Process in very small batches with shorter timeout to avoid Render network timeouts
+      // If stats fetching fails consistently, skip it and proceed without stats
+      const batchSize = 5; // Reduced from 10 to 5 for Render's slower network
       const playersWithStats: any[] = [];
       let statsLogCount = 0;
+      let totalStatsFetched = 0;
+      let consecutiveFailures = 0;
+      const MAX_CONSECUTIVE_FAILURES = 10; // Stop trying after 10 consecutive failures
 
       for (let i = 0; i < rosters.flat().length; i += batchSize) {
+        // Stop fetching stats if we're hitting too many consecutive failures
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          console.log(`loadPlayers: Stopping stats fetch after ${consecutiveFailures} consecutive failures - proceeding without stats`);
+          break;
+        }
+
         const batch = rosters.flat().slice(i, i + batchSize);
         const batchResults = await Promise.all(
           batch.map(async (player) => {
             try {
-              // Try landing endpoint with short timeout
+              // Try landing endpoint with shorter timeout for Render
               let stats: any = null;
               try {
-                const landingStats = await this.fetchJson<{ skaterStats?: any; goalieStats?: any }>(
-                  `player/${player.id}/landing`,
-                );
+                const landingStats = await Promise.race([
+                  this.fetchJson<{ skaterStats?: any; goalieStats?: any }>(
+                    `player/${player.id}/landing`,
+                  ),
+                  new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error("Stats fetch timeout")), 10000) // 10s timeout per player
+                  )
+                ]);
                 stats = landingStats.skaterStats?.regular?.[0] || landingStats.goalieStats?.regular?.[0];
-                if (stats && statsLogCount < 3) {
-                  console.log(`Got stats for ${player.fullName}:`, stats);
-                  statsLogCount++;
+                if (stats) {
+                  totalStatsFetched++;
+                  consecutiveFailures = 0; // Reset on success
+                  if (statsLogCount < 3) {
+                    console.log(`Got stats for ${player.fullName}:`, stats);
+                    statsLogCount++;
+                  }
+                } else {
+                  consecutiveFailures++;
                 }
               } catch (e) {
-                // Silently fail - player will have null stats
+                consecutiveFailures++;
+                // Log only first few failures to avoid log spam
+                if (statsLogCount < 3) {
+                  console.log(`Failed to fetch stats for ${player.fullName}:`, e instanceof Error ? e.message : String(e));
+                  statsLogCount++;
+                }
               }
 
               return {
@@ -734,6 +760,7 @@ class NhlWebApiProvider implements NhlDataProvider {
                 seasonStats: stats || null,
               };
             } catch {
+              consecutiveFailures++;
               return {
                 ...player,
                 seasonStats: null,
@@ -745,7 +772,18 @@ class NhlWebApiProvider implements NhlDataProvider {
       }
 
       const playersWithStatsCount = playersWithStats.filter(p => p.seasonStats && p.seasonStats.goals > 0).length;
-      console.log(`loadPlayers: ${playersWithStatsCount} players with actual stats, ${playersWithStats.length - playersWithStatsCount} without stats`);
+      console.log(`loadPlayers: ${playersWithStatsCount} players with actual stats (${totalStatsFetched} stats fetched), ${playersWithStats.length - playersWithStatsCount} without stats`);
+
+      // If we got 0 stats but fetched many requests, the endpoint might be returning empty stats
+      // Log a warning if this happens
+      if (totalStatsFetched > 0 && playersWithStatsCount === 0) {
+        console.warn(`WARNING: Fetched ${totalStatsFetched} stats responses but 0 players with goals > 0. Stats structure may have changed.`);
+      }
+
+      // If we have very few stats overall, log a warning
+      if (playersWithStatsCount < 10 && rosters.flat().length > 50) {
+        console.warn(`WARNING: Only ${playersWithStatsCount} players with stats out of ${rosters.flat().length}. NHL stats endpoint may be unreliable.`);
+      }
 
       try {
         playersCache = GetPlayersResponse.parse(
