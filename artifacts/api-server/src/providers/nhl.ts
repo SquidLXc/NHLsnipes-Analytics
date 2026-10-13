@@ -704,8 +704,8 @@ class NhlWebApiProvider implements NhlDataProvider {
       console.log(`loadPlayers: Loaded ${rosters.flat().length} players from rosters`);
 
       // Fetch stats for players - needed for prop calculations
+      // Try multiple endpoints: landing first, then stats endpoint as fallback
       // Process in very small batches with shorter timeout to avoid Render network timeouts
-      // If stats fetching fails consistently, skip it and proceed without stats
       const batchSize = 5; // Reduced from 10 to 5 for Render's slower network
       const playersWithStats: any[] = [];
       let statsLogCount = 0;
@@ -724,34 +724,56 @@ class NhlWebApiProvider implements NhlDataProvider {
         const batchResults = await Promise.all(
           batch.map(async (player) => {
             try {
-              // Try landing endpoint with shorter timeout for Render
               let stats: any = null;
+
+              // Try landing endpoint first
               try {
                 const landingStats = await Promise.race([
                   this.fetchJson<{ skaterStats?: any; goalieStats?: any }>(
                     `player/${player.id}/landing`,
                   ),
                   new Promise<never>((_, reject) =>
-                    setTimeout(() => reject(new Error("Stats fetch timeout")), 10000) // 10s timeout per player
+                    setTimeout(() => reject(new Error("Landing endpoint timeout")), 8000) // 8s timeout
                   )
                 ]);
                 stats = landingStats.skaterStats?.regular?.[0] || landingStats.goalieStats?.regular?.[0];
                 if (stats) {
                   totalStatsFetched++;
-                  consecutiveFailures = 0; // Reset on success
+                  consecutiveFailures = 0;
                   if (statsLogCount < 3) {
-                    console.log(`Got stats for ${player.fullName}:`, stats);
+                    console.log(`Got stats from landing for ${player.fullName}:`, stats);
                     statsLogCount++;
                   }
-                } else {
-                  consecutiveFailures++;
                 }
               } catch (e) {
-                consecutiveFailures++;
-                // Log only first few failures to avoid log spam
-                if (statsLogCount < 3) {
-                  console.log(`Failed to fetch stats for ${player.fullName}:`, e instanceof Error ? e.message : String(e));
-                  statsLogCount++;
+                // Landing failed, try stats endpoint as fallback
+                try {
+                  const statsData = await Promise.race([
+                    this.fetchJson<{ stats?: any }>(
+                      `player/${player.id}/stats`,
+                    ),
+                    new Promise<never>((_, reject) =>
+                      setTimeout(() => reject(new Error("Stats endpoint timeout")), 8000) // 8s timeout
+                    )
+                  ]);
+                  // Stats endpoint has different structure - try to extract from it
+                  if (statsData.stats && statsData.stats.length > 0) {
+                    stats = statsData.stats[0]; // First entry should be current season
+                    if (stats) {
+                      totalStatsFetched++;
+                      consecutiveFailures = 0;
+                      if (statsLogCount < 3) {
+                        console.log(`Got stats from stats endpoint for ${player.fullName}:`, stats);
+                        statsLogCount++;
+                      }
+                    }
+                  }
+                } catch (e2) {
+                  consecutiveFailures++;
+                  if (statsLogCount < 3) {
+                    console.log(`Failed to fetch stats for ${player.fullName} (both endpoints):`, e instanceof Error ? e.message : String(e));
+                    statsLogCount++;
+                  }
                 }
               }
 
