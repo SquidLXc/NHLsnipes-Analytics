@@ -1602,10 +1602,17 @@ class NhlWebApiProvider implements NhlDataProvider {
           continue;
         }
 
+        // Strip team suffix from player name (e.g., "Sebastian Aho (CAR)" -> "Sebastian Aho")
+        let playerName = prop.player;
+        const suffixMatch = playerName.match(/^(.+?)\s+\([A-Z]{3}\)$/);
+        if (suffixMatch) {
+          playerName = suffixMatch[1];
+        }
+
         // Add over price if available
         if (prop.over_price !== null && prop.over_price !== 0) {
           playerProps.push({
-            playerName: prop.player,
+            playerName,
             market: prop.market,
             odds: prop.over_price,
             bookmaker: prop.bookmaker_title,
@@ -1616,7 +1623,7 @@ class NhlWebApiProvider implements NhlDataProvider {
         // Add under price if available
         if (prop.under_price !== null && prop.under_price !== 0) {
           playerProps.push({
-            playerName: prop.player,
+            playerName,
             market: prop.market,
             odds: prop.under_price,
             bookmaker: prop.bookmaker_title,
@@ -1629,10 +1636,10 @@ class NhlWebApiProvider implements NhlDataProvider {
       console.log(`Total anytime-goal props from Parlay: ${playerProps.length}`);
       console.log(`Sample props:`, playerProps.slice(0, 5).map(p => `${p.playerName} @ ${p.odds} (${p.bookmaker})`));
 
-      // Check for specific star players
+      // Check for specific star players (after suffix stripping)
       const starPlayers = ['Connor McDavid', 'Leon Draisaitl', 'Mitch Marner', 'Auston Matthews', 'Nathan MacKinnon', 'Artemi Panarin', 'Connor Bedard', 'Sebastian Aho'];
-      const foundStars = playerProps.filter(p => starPlayers.some(star => p.playerName.includes(star)));
-      console.log(`Star players found in Parlay props:`, foundStars.map(p => p.playerName));
+      const foundStars = playerProps.filter(p => starPlayers.some(star => p.playerName === star));
+      console.log(`Star players found in Parlay props (exact match):`, foundStars.map(p => p.playerName));
 
       return playerProps;
     } catch (error) {
