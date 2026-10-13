@@ -1319,8 +1319,18 @@ class NhlWebApiProvider implements NhlDataProvider {
 
         // Debug logging for players with odds issues
         if (player.fullName === 'Nicolas Deslauriers' || player.fullName === 'Mark Jankowski' ||
-            player.fullName === 'Jesperi Kotkaniemi' || player.fullName === 'Eric Robinson') {
-          console.log(`DEBUG ${player.fullName}: matchedOdds=${matchingOdds ? 'YES' : 'NO'}, odds=${odds}, line=${line}, hasValidOdds=${hasValidOdds}`);
+            player.fullName === 'Jesperi Kotkaniemi' || player.fullName === 'Eric Robinson' ||
+            player.fullName === 'Sebastian Aho' || player.fullName === 'Connor McDavid' ||
+            player.fullName === 'Mitch Marner' || player.fullName === 'Alexis Lafrenière') {
+          console.log(`DEBUG ${player.fullName}: playerCanonical=${playerCanonical}, playerLastFirst=${playerLastFirst}, matchedOdds=${matchingOdds ? 'YES' : 'NO'}, odds=${odds}, line=${line}, hasValidOdds=${hasValidOdds}`);
+          if (!matchingOdds) {
+            // Show available keys that might match
+            const similarKeys = Array.from(oddsMap.keys()).filter(k =>
+              k.includes(playerCanonical) || k.includes(playerLastFirst) ||
+              playerCanonical.includes(k) || playerLastFirst.includes(k)
+            ).slice(0, 3);
+            console.log(`  Similar keys in oddsMap:`, similarKeys);
+          }
         }
 
         // Calculate edge if we have valid odds AND valid probability (either NHL stats or sportsbook-implied)
@@ -1618,6 +1628,11 @@ class NhlWebApiProvider implements NhlDataProvider {
       console.log(`=== getPlayerPropsOdds Normalization ===`);
       console.log(`Total anytime-goal props from Parlay: ${playerProps.length}`);
       console.log(`Sample props:`, playerProps.slice(0, 5).map(p => `${p.playerName} @ ${p.odds} (${p.bookmaker})`));
+
+      // Check for specific star players
+      const starPlayers = ['Connor McDavid', 'Leon Draisaitl', 'Mitch Marner', 'Auston Matthews', 'Nathan MacKinnon', 'Artemi Panarin', 'Connor Bedard', 'Sebastian Aho'];
+      const foundStars = playerProps.filter(p => starPlayers.some(star => p.playerName.includes(star)));
+      console.log(`Star players found in Parlay props:`, foundStars.map(p => p.playerName));
 
       return playerProps;
     } catch (error) {
