@@ -83,7 +83,7 @@ interface SlipState {
   picks: SlipPick[];
   mode: 'single' | 'parlay';
   stake: number;
-  selectedSportsbook: string | null;
+  selectedSportsbook: string;
 }
 
 const SLIP_STORAGE_KEY = 'nhlsnipes-slip';
@@ -97,8 +97,15 @@ function getSlipFromStorage(): SlipState {
   } catch (e) {
     console.error('Failed to parse slip from storage:', e);
   }
-  return { picks: [], mode: 'parlay', stake: 10, selectedSportsbook: null };
+  return { picks: [], mode: 'parlay', stake: 10, selectedSportsbook: 'FanDuel' };
 }
+
+const SPORTSBOOKS = [
+  { id: 'FanDuel', name: 'FanDuel', url: 'https://sportsbook.fanduel.com/sports/hockey?category=player-props' },
+  { id: 'DraftKings', name: 'DraftKings', url: 'https://sportsbook.draftkings.com/leagues/hockey/nhl?category=player-props' },
+  { id: 'BetMGM', name: 'BetMGM', url: 'https://sports.betmgm.com/en/sports/hockey-1/nhl' },
+  { id: 'Caesars', name: 'Caesars', url: 'https://www.caesars.com/us/sports-betting/nhl' },
+] as const;
 
 function saveSlipToStorage(slip: SlipState) {
   try {
@@ -743,7 +750,7 @@ function SlipBuilderPage() {
   }, [slip]);
 
   const clearSlip = () => {
-    setSlip({ picks: [], mode: 'parlay', stake: 10, selectedSportsbook: null });
+    setSlip({ picks: [], mode: 'parlay', stake: 10, selectedSportsbook: 'FanDuel' });
   };
 
   const removePick = (id: string) => {
@@ -777,7 +784,12 @@ function SlipBuilderPage() {
       eyebrow="Betting Slip"
       title="Slip Builder"
       copy="Build and track your betting slips. Add picks from the Prop board, compare odds, and calculate potential returns."
-      action={slip.picks.length > 0 && <button onClick={clearSlip} className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-semibold text-destructive">Clear Slip <X size={14} /></button>}
+      action={
+        <div className="flex items-center gap-2">
+          {slip.picks.length > 0 && <button onClick={clearSlip} className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-semibold text-destructive">Clear Slip <X size={14} /></button>}
+          <button onClick={() => window.location.reload()} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold hover:border-primary/40 hover:text-primary"><RefreshCw size={14} />Refresh</button>
+        </div>
+      }
     />
 
     {slip.picks.length === 0 ? (
@@ -852,6 +864,19 @@ function SlipBuilderPage() {
 
             <div className="space-y-4">
               <div>
+                <label className="mb-2 block text-xs font-semibold text-muted-foreground">Sportsbook</label>
+                <select
+                  value={slip.selectedSportsbook}
+                  onChange={(e) => setSlip(prev => ({ ...prev, selectedSportsbook: e.target.value }))}
+                  className="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm font-semibold"
+                >
+                  {SPORTSBOOKS.map(book => (
+                    <option key={book.id} value={book.id}>{book.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <label className="mb-2 block text-xs font-semibold text-muted-foreground">Stake ($)</label>
                 <input
                   type="number"
@@ -894,6 +919,15 @@ function SlipBuilderPage() {
                   Odds provided by {slip.picks[0]?.source || 'sportsbooks'}. Verify with your sportsbook before placing bets.
                 </p>
               </div>
+
+              <a
+                href={SPORTSBOOKS.find(b => b.id === slip.selectedSportsbook)?.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+              >
+                Open {slip.selectedSportsbook} <ExternalLink size={14} />
+              </a>
             </div>
           </div>
 
