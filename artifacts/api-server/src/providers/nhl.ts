@@ -1888,67 +1888,44 @@ class NhlWebApiProvider implements NhlDataProvider {
   async getSnipes() {
     try {
       const props = await this.getProps();
-      // Return top props as snipes (any with valid edge > 0 and probability > 0)
-      // This includes both NHL stats and sportsbook-implied probabilities
-      const snipes = props.filter(p => p.edge !== null && p.edge > 0 && p.overProbability > 0).slice(0, 10);
-
-      // Map props to snipes schema format with calculated projections
-      const snipesMapped = snipes.map(p => {
-        const seasonStats = (p.player as any).seasonStats;
-        const games = Math.max(1, seasonStats?.games || 1);
-        
-        // Calculate per-game stats
-        const goalsPerGame = (seasonStats?.goals || 0) / games;
-        const assistsPerGame = (seasonStats?.assists || 0) / games;
-        const pointsPerGame = (seasonStats?.points || 0) / games;
-        const sogPerGame = (seasonStats?.sog || 0) / games;
-        const savesPerGame = (seasonStats?.saves || 0) / games;
-        const blocksPerGame = (seasonStats?.blocked || 0) / games;
-        const hitsPerGame = (seasonStats?.hits || 0) / games;
-
-        // Calculate projections based on position
-        const position = p.player.position || 'F';
-        let sogProjection = null;
-        let pointProjection = null;
-        let assistProjection = null;
-        let savesProjection = null;
-        let blocksProjection = null;
-        let hitsProjection = null;
-
-        if (position === 'G') {
-          // Goalies: saves based on recent performance
-          savesProjection = savesPerGame > 0 ? savesPerGame : 25;
-        } else if (position === 'D') {
-          // Defensemen: shots, blocks, hits
-          sogProjection = sogPerGame > 0 ? sogPerGame : 2.5;
-          blocksProjection = blocksPerGame > 0 ? blocksPerGame : 3;
-          hitsProjection = hitsPerGame > 0 ? hitsPerGame : 2;
-          pointProjection = pointsPerGame > 0 ? pointsPerGame : 0.4;
-          assistProjection = assistsPerGame > 0 ? assistsPerGame : 0.3;
-        } else {
-          // Forwards: shots, points, assists
-          sogProjection = sogPerGame > 0 ? sogPerGame : 3;
-          pointProjection = pointsPerGame > 0 ? pointsPerGame : 0.6;
-          assistProjection = assistsPerGame > 0 ? assistsPerGame : 0.4;
-          hitsProjection = hitsPerGame > 0 ? hitsPerGame : 1.5;
-        }
-
-        return {
-          ...p,
-          score: p.modelProjection || 0,
-          goalProbability: p.overProbability || 0,
-          sogProjection,
-          pointProjection,
-          assistProbability: assistProjection,
-          savesProjection,
-          blocksProjection,
-          hitsProjection,
-          factors: []
-        };
+      const players = await this.getPlayers();
+      const games = await this.getGames();
+      
+      // Build opponent map
+      const opponentByTeam = new Map();
+      games.forEach((game) => {
+        opponentByTeam.set(game.homeTeam.id, game.awayTeam);
+        opponentByTeam.set(game.awayTeam.id, game.homeTeam);
       });
+      
+      // For goals market: use edge-based filtering (requires valid odds)
+      const goalSnipes = props.filter(p => p.edge !== null && p.edge > 0 && p.overProbability > 0).slice(0, 10);
+      
+      // For position-specific markets: get all players regardless of odds
+      const goalies = players.filter(p => p.position === 'G').slice(0, 10);
+      const defensemen = players.filter(p => p.position === 'D').slice(0, 10);
+      const allPlayers = players.slice(0, 10);
+      
+      // Merge all snipes with calculated projections
+      const allSnipes = [
+        ...goalSnipes.map(p => this.mapPropToSnipe(p)),
+        ...goalies.map(p => this.mapPlayerToSnipe(p, 'G', opponentByTeam)),
+        ...defensemen.map(p => this.mapPlayerToSnipe(p, 'D', opponentByTeam)),
+        ...allPlayers.map(p => this.mapPlayerToSnipe(p, 'F', opponentByTeam))
+      ];
+      
+      // Remove duplicates by player ID
+      const uniqueSnipes = new Map();
+      allSnipes.forEach(snipe => {
+        if (!uniqueSnipes.has(snipe.player.id)) {
+          uniqueSnipes.set(snipe.player.id, snipe);
+        }
+      });
+      
+      const snipesArray = Array.from(uniqueSnipes.values());
 
       try {
-        return GetSnipesResponse.parse(snipesMapped);
+        return GetSnipesResponse.parse(snipesArray);
       } catch (error) {
         console.error("Failed to parse snipes response - schema mismatch, returning empty array:", error);
         return GetSnipesResponse.parse([]);
@@ -1957,6 +1934,67 @@ class NhlWebApiProvider implements NhlDataProvider {
       console.error("getSnipes error:", error);
       return GetSnipesResponse.parse([]);
     }
+  }
+  
+  private mapPropToSnipe(prop: any) {
+    const seasonStats = (prop.player as any).seasonStats;
+    const games = Math.max(1, seasonStats?.games || 1);
+    
+    const assistsPerGame = (seasonStats?.assists || 0) / games;
+    const pointsPerGame = (seasonStats?.points || 0) / games;
+    const sogPerGame = (seasonStats?.sog || 0) / games;
+    const savesPerGame = (seasonStats?.saves || 0) / games;
+    const blocksPerGame = (seasonStats?.blocked || 0) / games;
+    const hitsPerGame = (seasonStats?.hits || 0) / games;
+    
+    const position = prop.player.position || 'F';
+    
+    return {
+      ...prop,
+      score: prop.modelProjection || 0,
+      goalProbability: prop.overProbability || 0,
+      sogProjection: sogPerGame > 0 ? sogPerGame : (position === 'D' ? 2.5 : 3),
+      pointProjection: pointsPerGame > 0 ? pointsPerGame : (position === 'D' ? 0.4 : 0.6),
+      assistProbability: assistsPerGame > 0 ? assistsPerGame : (position === 'D' ? 0.3 : 0.4),
+      savesProjection: position === 'G' ? (savesPerGame > 0 ? savesPerGame : 25) : null,
+      blocksProjection: position === 'D' ? (blocksPerGame > 0 ? blocksPerGame : 3) : null,
+      hitsProjection: hitsPerGame > 0 ? hitsPerGame : (position === 'D' ? 2 : 1.5),
+      factors: []
+    };
+  }
+  
+  private mapPlayerToSnipe(player: any, position: string, opponentByTeam: Map<string, any>) {
+    const seasonStats = (player as any).seasonStats;
+    const games = Math.max(1, seasonStats?.games || 1);
+    
+    const goalsPerGame = (seasonStats?.goals || 0) / games;
+    const assistsPerGame = (seasonStats?.assists || 0) / games;
+    const pointsPerGame = (seasonStats?.points || 0) / games;
+    const sogPerGame = (seasonStats?.sog || 0) / games;
+    const savesPerGame = (seasonStats?.saves || 0) / games;
+    const blocksPerGame = (seasonStats?.blocked || 0) / games;
+    const hitsPerGame = (seasonStats?.hits || 0) / games;
+    
+    const opponent = opponentByTeam.get(player.team.id) || { id: 'unknown', name: 'Unknown', abbreviation: 'UNK', logoUrl: null, primaryColor: null, secondaryColor: null };
+    
+    return {
+      id: `snipe-${player.id}`,
+      player,
+      opponent,
+      score: 0,
+      goalProbability: goalsPerGame > 0 ? goalsPerGame : 0.3,
+      sogProjection: sogPerGame > 0 ? sogPerGame : (position === 'D' ? 2.5 : 3),
+      pointProjection: pointsPerGame > 0 ? pointsPerGame : (position === 'D' ? 0.4 : 0.6),
+      assistProbability: assistsPerGame > 0 ? assistsPerGame : (position === 'D' ? 0.3 : 0.4),
+      savesProjection: position === 'G' ? (savesPerGame > 0 ? savesPerGame : 25) : null,
+      blocksProjection: position === 'D' ? (blocksPerGame > 0 ? blocksPerGame : 3) : null,
+      hitsProjection: hitsPerGame > 0 ? hitsPerGame : (position === 'D' ? 2 : 1.5),
+      modelProjection: null,
+      line: null,
+      edge: null,
+      confidence: 'WATCH',
+      factors: []
+    };
   }
 
   async getAudit() {
