@@ -1004,8 +1004,8 @@ class NhlWebApiProvider implements NhlDataProvider {
       console.log(`getMatchup: Fetching rosters for ${game.awayTeam.abbreviation} and ${game.homeTeam.abbreviation}`);
       // Use loadPlayers() which already has cached data - no need to call getPlayer() for each player
       const allPlayers = await this.loadPlayers();
-      const awayPlayers = allPlayers.filter(p => p.team.abbreviation === game.awayTeam.abbreviation);
-      const homePlayers = allPlayers.filter(p => p.team.abbreviation === game.homeTeam.abbreviation);
+      const awayPlayers = allPlayers.filter(p => p.team.abbreviation === game.awayTeam.abbreviation).map(p => ({ ...p, seasonStats: null }));
+      const homePlayers = allPlayers.filter(p => p.team.abbreviation === game.homeTeam.abbreviation).map(p => ({ ...p, seasonStats: null }));
 
       console.log(`getMatchup: ${awayPlayers.length} away players, ${homePlayers.length} home players`);
       return GetMatchupResponse.parse({
