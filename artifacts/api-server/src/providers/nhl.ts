@@ -1197,18 +1197,38 @@ class NhlWebApiProvider implements NhlDataProvider {
       const canonicalPlayerName = (name: string) =>
         name.toLowerCase().replace(/[^a-z]/g, "");
       
-      const oddsMap = new Map<string, Array<{ odds: number; line: number | null; bookmaker: string }>>();
-      for (const [playerName, oddsArray] of playerPropsOdds.entries()) {
-        const propCanonical = canonicalPlayerName(playerName);
-        oddsMap.set(propCanonical, oddsArray);
+      const oddsMap = new Map<string, { odds: number; line: number | null; bookmaker: string }>();
+      const bookmakerOddsMap = new Map<string, Array<{ odds: number; line: number | null; bookmaker: string }>>();
+
+      for (const prop of playerPropsOdds) {
+        const propCanonical = canonicalPlayerName(prop.playerName);
+        oddsMap.set(propCanonical, { odds: prop.odds, line: prop.line ?? null, bookmaker: prop.bookmaker });
+
+        // Also add to bookmakerOddsMap for multi-bookmaker support
+        if (!bookmakerOddsMap.has(propCanonical)) {
+          bookmakerOddsMap.set(propCanonical, []);
+        }
+        bookmakerOddsMap.get(propCanonical)!.push({
+          odds: prop.odds,
+          line: prop.line ?? null,
+          bookmaker: prop.bookmaker,
+        });
 
         // Also store variations for better matching
         // If name has comma, it's "Last, First" format, add "First Last" variant
-        if (playerName.includes(',')) {
-          const parts = playerName.split(',').map(p => p.trim());
+        if (prop.playerName.includes(',')) {
+          const parts = prop.playerName.split(',').map(p => p.trim());
           if (parts.length === 2) {
             const firstLast = canonicalPlayerName(`${parts[1]} ${parts[0]}`);
-            oddsMap.set(firstLast, oddsArray);
+            oddsMap.set(firstLast, { odds: prop.odds, line: prop.line ?? null, bookmaker: prop.bookmaker });
+            if (!bookmakerOddsMap.has(firstLast)) {
+              bookmakerOddsMap.set(firstLast, []);
+            }
+            bookmakerOddsMap.get(firstLast)!.push({
+              odds: prop.odds,
+              line: prop.line ?? null,
+              bookmaker: prop.bookmaker,
+            });
           }
         }
       }
@@ -1216,7 +1236,7 @@ class NhlWebApiProvider implements NhlDataProvider {
       // Debug: log sample odds
       console.log(`=== TheRundown Player Props Debug ===`);
       console.log(`Total players with odds: ${oddsMap.size}`);
-      console.log(`Sample players:`, Array.from(oddsMap.entries()).slice(0, 3).map(([k, v]) => `${k}: ${v.length} odds from ${[...new Set(v.map(o => o.bookmaker))].join(', ')}`));
+      console.log(`Sample players:`, Array.from(oddsMap.entries()).slice(0, 3).map(([k, v]) => `${k} -> ${v.bookmaker} @ ${v.odds}`));
 
       // Calculate predictions for each player
       const props = await Promise.all(
@@ -1306,16 +1326,26 @@ class NhlWebApiProvider implements NhlDataProvider {
           }
         }
         
+        // Get all bookmaker odds for this player
+        let allBookmakerOdds = bookmakerOddsMap.get(playerCanonical) || bookmakerOddsMap.get(playerLastFirst);
+        if (!allBookmakerOdds) {
+          for (const [key, value] of bookmakerOddsMap.entries()) {
+            if (key.includes(playerCanonical) || key.includes(playerLastFirst) ||
+                playerCanonical.includes(key) || playerLastFirst.includes(key)) {
+              allBookmakerOdds = value;
+              break;
+            }
+          }
+        }
+        
         // Count successful matches
-        if (matchingOdds && matchingOdds.length > 0) {
+        if (matchingOdds) {
           matchedPlayersCount++;
         }
 
-        // Select the first valid odds (we could later add logic to select the best odds)
-        const selectedOdds = matchingOdds?.find(o => o.odds !== null && o.odds !== 0 && o.odds !== undefined && !isNaN(o.odds)) ?? null;
-        const odds = selectedOdds?.odds ?? null;
-        const line = selectedOdds?.line ?? null;
-        const bookmaker = selectedOdds?.bookmaker ?? null;
+        const odds = matchingOdds?.odds ?? null;
+        const line = matchingOdds?.line ?? null;
+        const bookmaker = matchingOdds?.bookmaker ?? null;
 
         // Don't skip players with invalid odds - just mark them as unavailable
         const hasValidOdds = odds !== null && odds !== 0 && odds !== undefined && !isNaN(odds);
@@ -1325,7 +1355,7 @@ class NhlWebApiProvider implements NhlDataProvider {
             player.fullName === 'Jesperi Kotkaniemi' || player.fullName === 'Eric Robinson' ||
             player.fullName === 'Sebastian Aho' || player.fullName === 'Connor McDavid' ||
             player.fullName === 'Mitch Marner' || player.fullName === 'Alexis Lafrenière') {
-          console.log(`DEBUG ${player.fullName}: playerCanonical=${playerCanonical}, playerLastFirst=${playerLastFirst}, matchedOdds=${matchingOdds ? 'YES' : 'NO'}, totalOdds=${matchingOdds?.length ?? 0}, selectedOdds=${selectedOdds?.bookmaker} @ ${selectedOdds?.odds}, hasValidOdds=${hasValidOdds}`);
+          console.log(`DEBUG ${player.fullName}: playerCanonical=${playerCanonical}, playerLastFirst=${playerLastFirst}, matchedOdds=${matchingOdds ? 'YES' : 'NO'}, selectedOdds=${bookmaker} @ ${odds}, allBookmakerOdds=${allBookmakerOdds?.length ?? 0}, hasValidOdds=${hasValidOdds}`);
           if (!matchingOdds) {
             // Show available keys that might match
             const similarKeys = Array.from(oddsMap.keys()).filter(k =>
@@ -1384,7 +1414,7 @@ class NhlWebApiProvider implements NhlDataProvider {
           confidence,
           source: usingSportsbookImplied ? `${bookmaker ?? 'Parlay'} (implied)` : (bookmaker ?? null),
           odds, // Add the actual odds/price (e.g., +2200, -150)
-          bookmakerOdds: matchingOdds || [], // All bookmaker odds for this player
+          bookmakerOdds: allBookmakerOdds || [], // All bookmaker odds for this player
         };
       })
     );
@@ -1592,11 +1622,12 @@ class NhlWebApiProvider implements NhlDataProvider {
       }
 
       // Convert Parlay props to our internal format - keep all bookmakers
-      const playerPropsMap = new Map<string, Array<{
+      const playerProps: Array<{
+        playerName: string;
         odds: number;
         bookmaker: string;
         line?: number;
-      }>>();
+      }> = [];
 
       for (const prop of parlayProps) {
         // Filter to only anytime goal scorer market
@@ -1611,16 +1642,10 @@ class NhlWebApiProvider implements NhlDataProvider {
           playerName = suffixMatch[1];
         }
 
-        // Initialize array for this player if not exists
-        if (!playerPropsMap.has(playerName)) {
-          playerPropsMap.set(playerName, []);
-        }
-
-        const playerOdds = playerPropsMap.get(playerName)!;
-
         // Add over price if available
         if (prop.over_price !== null && prop.over_price !== 0) {
-          playerOdds.push({
+          playerProps.push({
+            playerName,
             odds: prop.over_price,
             bookmaker: prop.bookmaker_title,
             line: prop.line,
@@ -1629,7 +1654,8 @@ class NhlWebApiProvider implements NhlDataProvider {
 
         // Add under price if available
         if (prop.under_price !== null && prop.under_price !== 0) {
-          playerOdds.push({
+          playerProps.push({
+            playerName,
             odds: prop.under_price,
             bookmaker: prop.bookmaker_title,
             line: prop.line,
@@ -1638,11 +1664,10 @@ class NhlWebApiProvider implements NhlDataProvider {
       }
 
       console.log(`=== getPlayerPropsOdds Normalization ===`);
-      console.log(`Total anytime-goal props from Parlay: ${Array.from(playerPropsMap.values()).flat().length}`);
-      console.log(`Unique players with odds: ${playerPropsMap.size}`);
-      console.log(`Sample props:`, Array.from(playerPropsMap.entries()).slice(0, 3).map(([name, odds]) => `${name}: ${odds.length} odds from ${[...new Set(odds.map(o => o.bookmaker))].join(', ')}`));
+      console.log(`Total anytime-goal props from Parlay: ${playerProps.length}`);
+      console.log(`Sample props:`, playerProps.slice(0, 5).map(p => `${p.playerName} @ ${p.odds} (${p.bookmaker})`));
 
-      return playerPropsMap;
+      return playerProps;
     } catch (error) {
       console.error("Error fetching player props from Parlay API:", error);
       return [];
