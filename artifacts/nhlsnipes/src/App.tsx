@@ -77,6 +77,7 @@ interface SlipPick {
   confidence: string | null;
   overProbability: number | null;
   edge: number | null;
+  bookmakerOdds: Array<{ odds: number; line: number | null; bookmaker: string }>;
 }
 
 interface SlipState {
@@ -589,7 +590,7 @@ function TopEdgeCard({ prop, rank }: { prop: Prop; rank: number }) {
   }, [prop.id]);
 
   const addToSlip = () => {
-    if (!available || prop.odds === null) return;
+    if (!available || prop.odds === null || !Number.isFinite(prop.odds) || prop.odds === 0) return;
 
     const currentSlip = getSlipFromStorage();
     const newPick: SlipPick = {
@@ -605,6 +606,7 @@ function TopEdgeCard({ prop, rank }: { prop: Prop; rank: number }) {
       confidence: prop.confidence,
       overProbability: prop.overProbability,
       edge: prop.edge,
+      bookmakerOdds: prop.bookmakerOdds || [],
     };
 
     if (currentSlip.picks.some(p => p.id === prop.id)) {
@@ -698,7 +700,7 @@ function PropCard({ prop }: { prop: Prop }) {
   }, [prop.id]);
 
   const addToSlip = () => {
-    if (!available || prop.odds === null) return;
+    if (!available || prop.odds === null || !Number.isFinite(prop.odds) || prop.odds === 0) return;
 
     const currentSlip = getSlipFromStorage();
     const newPick: SlipPick = {
@@ -714,6 +716,7 @@ function PropCard({ prop }: { prop: Prop }) {
       confidence: prop.confidence,
       overProbability: prop.overProbability,
       edge: prop.edge,
+      bookmakerOdds: prop.bookmakerOdds || [],
     };
 
     // Check if already in slip
@@ -757,6 +760,13 @@ function SlipBuilderPage() {
     setSlip(prev => ({ ...prev, picks: prev.picks.filter(p => p.id !== id) }));
   };
 
+  const updatePickOdds = (pickId: string, newOdds: number, bookmaker: string) => {
+    setSlip(prev => ({
+      ...prev,
+      picks: prev.picks.map(p => p.id === pickId ? { ...p, odds: newOdds, source: bookmaker } : p)
+    }));
+  };
+
   // Calculate combined odds for parlay
   const combinedDecimalOdds = useMemo(() => {
     if (slip.picks.length === 0) return 0;
@@ -777,7 +787,7 @@ function SlipBuilderPage() {
     }
   }, [slip.mode, slip.stake, slip.picks, combinedDecimalOdds]);
 
-  const allValid = slip.picks.length > 0 && slip.picks.every(p => p.odds > 0 && p.odds !== null);
+  const allValid = slip.picks.length > 0 && slip.picks.every(p => Number.isFinite(p.odds) && p.odds !== 0);
 
   return <>
     <PageHeader
@@ -838,6 +848,7 @@ function SlipBuilderPage() {
                     <div>
                       <p className="font-mono text-[9px] uppercase text-muted-foreground">Odds</p>
                       <p className="font-bold">{formatAmericanOdds(pick.odds)}</p>
+                      <p className="text-[9px] text-muted-foreground">{pick.source}</p>
                     </div>
                     <div>
                       <p className="font-mono text-[9px] uppercase text-muted-foreground">AI Prob</p>
@@ -848,6 +859,26 @@ function SlipBuilderPage() {
                       <p className={`font-bold ${pick.edge && pick.edge > 0 ? 'text-accent' : 'text-muted-foreground'}`}>{pct(pick.edge)}</p>
                     </div>
                   </div>
+                  {pick.bookmakerOdds && pick.bookmakerOdds.length > 1 && (
+                    <div className="mt-3 space-y-2">
+                      <p className="font-mono text-[9px] uppercase text-muted-foreground">Compare Odds</p>
+                      <div className="flex flex-wrap gap-2">
+                        {pick.bookmakerOdds.map((bo, idx) => (
+                          <button
+                            key={`${pick.id}-${idx}`}
+                            onClick={() => updatePickOdds(pick.id, bo.odds, bo.bookmaker)}
+                            className={`rounded-lg border px-2 py-1 text-[10px] font-semibold ${
+                              pick.odds === bo.odds && pick.source === bo.bookmaker
+                                ? 'border-primary bg-primary/10 text-primary'
+                                : 'border-border hover:border-primary/40'
+                            }`}
+                          >
+                            {bo.bookmaker}: {formatAmericanOdds(bo.odds)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <button onClick={() => removePick(pick.id)} className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
                   <X size={16} />
@@ -916,7 +947,7 @@ function SlipBuilderPage() {
               <div className="rounded-lg bg-secondary/10 p-3 text-center">
                 <Info size={16} className="mx-auto mb-1 text-secondary" />
                 <p className="text-[10px] text-muted-foreground">
-                  Odds provided by {slip.picks[0]?.source || 'sportsbooks'}. Verify with your sportsbook before placing bets.
+                  Odds from {slip.picks.length > 0 ? [...new Set(slip.picks.map(p => p.source))].join(', ') : 'multiple sportsbooks'}. Verify with your sportsbook before placing bets.
                 </p>
               </div>
 

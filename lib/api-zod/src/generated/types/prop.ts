@@ -31,4 +31,5 @@ export interface Prop {
   source: string | null;
   /** @nullable */
   odds: number | null;
+  bookmakerOdds: Array<{ odds: number; line: number | null; bookmaker: string }>;
 }
