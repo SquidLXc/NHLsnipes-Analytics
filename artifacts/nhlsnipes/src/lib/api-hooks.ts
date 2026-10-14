@@ -85,6 +85,7 @@ export const getGetGoaliesQueryKey = () => ["/api/goalies"] as const;
 export const getGetPropsQueryKey = (params?: { market?: string }) => ["/api/props", params] as const;
 export const getGetPropsByMarketQueryKey = (market: string) => ["/api/props", market] as const;
 export const getGetMatchupsQueryKey = () => ["/api/matchups"] as const;
+export const getGetMatchupQueryKey = (gameId: string) => ["/api/matchups", gameId] as const;
 export const getGetSnipesQueryKey = (params?: { market?: string }) => ["/api/snipes", params] as const;
 export const getGetAuditQueryKey = () => ["/api/audit"] as const;
 export const getGetModelPerformanceQueryKey = () => ["/api/model-performance"] as const;
@@ -142,6 +143,10 @@ export function useGetPropsByMarket(market: string, options?: QueryOptions) {
 
 export function useGetMatchups(options?: QueryOptions) {
   return useApiQuery<Matchup[]>("/api/matchups", options);
+}
+
+export function useGetMatchup(gameId: string, options?: QueryOptions) {
+  return useApiQuery<MatchupDetail>(`/api/matchups/${encodeURIComponent(gameId)}`, options);
 }
 
 export function useGetSnipes(params?: { market?: string }, options?: QueryOptions) {
