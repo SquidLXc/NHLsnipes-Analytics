@@ -283,23 +283,23 @@ function GameRow({ game }: { game: Game }) {
 function SnipeRow({ snipe, watchlist, onWatch, market }: { snipe: Snipe; watchlist: string[]; onWatch: (id: string) => void; market: Market }) {
   const saved = watchlist.includes(snipe.player.id);
   
-  // Get projection based on selected market
-  const getProjection = () => {
+  // Get projection and label based on selected market
+  const getProjectionData = () => {
     switch (market) {
-      case 'goals': return snipe.goalProbability;
-      case 'sog': return snipe.sogProjection;
-      case 'points': return snipe.pointProbability;
-      case 'assists': return snipe.assistProbability;
-      case 'saves': return (snipe as any).savesProjection;
-      case 'blocks': return (snipe as any).blocksProjection;
-      case 'hits': return (snipe as any).hitsProjection;
-      default: return snipe.modelProjection;
+      case 'goals': return { value: snipe.goalProbability, label: 'goal prob' };
+      case 'sog': return { value: snipe.sogProjection, label: 'shots' };
+      case 'points': return { value: snipe.pointProbability, label: 'points' };
+      case 'assists': return { value: snipe.assistProbability, label: 'assists' };
+      case 'saves': return { value: (snipe as any).savesProjection, label: 'saves' };
+      case 'blocks': return { value: (snipe as any).blocksProjection, label: 'blocks' };
+      case 'hits': return { value: (snipe as any).hitsProjection, label: 'hits' };
+      default: return { value: snipe.modelProjection, label: 'model' };
     }
   };
   
-  const projection = getProjection();
+  const projectionData = getProjectionData();
   
-  return <div data-testid={`row-snipe-${snipe.id}`} className="group grid gap-4 border-b border-border/80 py-4 first:pt-0 last:border-0 md:grid-cols-[1.6fr_1fr_1fr_1fr_auto] md:items-center"><div className="flex items-center gap-3"><button data-testid={`button-watch-${snipe.player.id}`} onClick={() => onWatch(snipe.player.id)} className={`rounded-lg border p-2 transition-colors ${saved ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-primary'}`}><Star size={14} fill={saved ? 'currentColor' : 'none'} /></button><PlayerImage player={snipe.player} size="sm" /><div><Link data-testid={`link-player-${snipe.player.id}`} href={`/players/${snipe.player.id}`} className="text-sm font-bold hover:text-primary">{snipe.player.fullName}</Link><div className="mt-0.5 text-[10px] text-muted-foreground">{snipe.player.team.abbreviation} · {snipe.player.position} · vs {snipe.opponent.abbreviation}</div></div></div><div><div className="text-sm font-semibold">{snipe.confidence}</div><div className="mt-1 h-1.5 w-24 rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(snipe.score, 100)}%` }} /></div></div><div><div className="font-mono text-sm text-foreground">{projection !== null ? fmt(projection) : '—'}</div><div className="text-[10px] text-muted-foreground">{market === 'all' ? 'model / ' : ''}{market !== 'all' ? `${market} / ` : ''}{fmt(snipe.line)} line</div></div><div><div className="font-mono text-sm text-primary">{pct(snipe.edge)}</div><div className="text-[10px] text-muted-foreground">edge</div></div><div className="flex flex-wrap gap-1 md:justify-end">{snipe.factors.slice(0, 2).map((factor) => <span key={factor} className="rounded border border-secondary/25 bg-secondary/10 px-2 py-1 text-[9px] text-secondary">{factor}</span>)}</div></div>;
+  return <div data-testid={`row-snipe-${snipe.id}`} className="group grid gap-4 border-b border-border/80 py-4 first:pt-0 last:border-0 md:grid-cols-[1.6fr_1fr_1fr_1fr_auto] md:items-center"><div className="flex items-center gap-3"><button data-testid={`button-watch-${snipe.player.id}`} onClick={() => onWatch(snipe.player.id)} className={`rounded-lg border p-2 transition-colors ${saved ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-primary'}`}><Star size={14} fill={saved ? 'currentColor' : 'none'} /></button><PlayerImage player={snipe.player} size="sm" /><div><Link data-testid={`link-player-${snipe.player.id}`} href={`/players/${snipe.player.id}`} className="text-sm font-bold hover:text-primary">{snipe.player.fullName}</Link><div className="mt-0.5 text-[10px] text-muted-foreground">{snipe.player.team.abbreviation} · {snipe.player.position} · vs {snipe.opponent.abbreviation}</div></div></div><div><div className="text-sm font-semibold">{snipe.confidence}</div><div className="mt-1 h-1.5 w-24 rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(snipe.score, 100)}%` }} /></div></div><div><div className="font-mono text-sm text-foreground">{projectionData.value !== null ? fmt(projectionData.value) : '—'}</div><div className="text-[10px] text-muted-foreground">{projectionData.label} / {fmt(snipe.line)} line</div></div><div><div className="font-mono text-sm text-primary">{pct(snipe.edge)}</div><div className="text-[10px] text-muted-foreground">edge</div></div><div className="flex flex-wrap gap-1 md:justify-end">{snipe.factors.slice(0, 2).map((factor) => <span key={factor} className="rounded border border-secondary/25 bg-secondary/10 px-2 py-1 text-[9px] text-secondary">{factor}</span>)}</div></div>;
 }
 
 function LiveAlertsPanel() {
@@ -541,7 +541,17 @@ function SnipesPage() {
   const query = useGetSnipes(undefined, { query: { queryKey: getGetSnipesQueryKey() } });
   const [market, setMarket] = useState<Market>('all');
   const [watchlist, setWatchlist] = useWatchlist();
-  const rows = ((query.data as Snipe[] | undefined) || []).filter((snipe) => market === 'all' || (market === 'goals' && snipe.goalProbability !== null) || (market === 'sog' && snipe.sogProjection !== null) || (market === 'points' && snipe.pointProbability !== null) || (market === 'assists' && snipe.assistProbability !== null) || (market === 'saves' && (snipe as any).savesProjection !== null) || (market === 'blocks' && (snipe as any).blocksProjection !== null) || (market === 'hits' && (snipe as any).hitsProjection !== null));
+  const rows = ((query.data as Snipe[] | undefined) || []).filter((snipe) => {
+    if (market === 'all') return true;
+    if (market === 'goals') return snipe.goalProbability !== null;
+    if (market === 'sog') return snipe.sogProjection !== null;
+    if (market === 'points') return snipe.pointProbability !== null;
+    if (market === 'assists') return snipe.assistProbability !== null;
+    if (market === 'saves') return snipe.player.position === 'G' && (snipe as any).savesProjection !== null;
+    if (market === 'blocks') return snipe.player.position === 'D' && (snipe as any).blocksProjection !== null;
+    if (market === 'hits') return (snipe as any).hitsProjection !== null;
+    return false;
+  });
   return <><PageHeader eyebrow="Ranked signal / live board" title="Snipes" copy="A ranked queue of player edges. Each row carries the model's reasoning instead of hiding behind a single score." action={<button data-testid="button-refresh-snipes" onClick={() => query.refetch()} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold hover:border-primary/40 hover:text-primary"><RefreshCw size={14} />Refresh</button>} /><div className="mb-5 flex gap-2 overflow-x-auto pb-1">{markets.map((item) => <button data-testid={`button-market-${item}`} key={item} onClick={() => setMarket(item)} className={`whitespace-nowrap rounded-lg border px-3 py-2 text-[11px] font-semibold capitalize transition-colors ${market === item ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'}`}>{item === 'all' ? 'All signals' : item}</button>)}</div><div className="rounded-xl border border-border bg-card/70 p-5 md:p-6"><div className="mb-4 hidden grid-cols-[1.6fr_1fr_1fr_1fr_auto] gap-4 border-b border-border pb-3 font-mono text-[9px] uppercase tracking-[.15em] text-muted-foreground md:grid"><span>Player / matchup</span><span>Confidence</span><span>Projection</span><span>Model edge</span><span>Context</span></div><QueryState loading={query.isLoading} error={query.isError} empty={!query.isLoading && !query.isError && rows.length === 0} onRetry={() => query.refetch()}><div>{rows.map((snipe) => <SnipeRow key={snipe.id} snipe={snipe} watchlist={watchlist} onWatch={setWatchlist} market={market} />)}</div></QueryState></div></>;
 }
 
