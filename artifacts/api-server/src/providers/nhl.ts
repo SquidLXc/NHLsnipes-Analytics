@@ -1923,12 +1923,12 @@ class NhlWebApiProvider implements NhlDataProvider {
           sogProjection = sogPerGame > 0 ? sogPerGame : 2.5;
           blocksProjection = blocksPerGame > 0 ? blocksPerGame : 3;
           hitsProjection = hitsPerGame > 0 ? hitsPerGame : 2;
-          pointProjection = pointPerGame > 0 ? pointPerGame : 0.4;
+          pointProjection = pointsPerGame > 0 ? pointsPerGame : 0.4;
           assistProjection = assistsPerGame > 0 ? assistsPerGame : 0.3;
         } else {
           // Forwards: shots, points, assists
           sogProjection = sogPerGame > 0 ? sogPerGame : 3;
-          pointProjection = pointPerGame > 0 ? pointPerGame : 0.6;
+          pointProjection = pointsPerGame > 0 ? pointsPerGame : 0.6;
           assistProjection = assistsPerGame > 0 ? assistsPerGame : 0.4;
           hitsProjection = hitsPerGame > 0 ? hitsPerGame : 1.5;
         }
