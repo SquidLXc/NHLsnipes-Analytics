@@ -719,6 +719,12 @@ function PropCard({ prop }: { prop: Prop }) {
       bookmakerOdds: prop.bookmakerOdds || [],
     };
 
+    console.log('Adding pick to slip:', {
+      playerName: newPick.playerName,
+      bookmakerOdds: newPick.bookmakerOdds,
+      bookmakerOddsCount: newPick.bookmakerOdds.length,
+    });
+
     // Check if already in slip
     if (currentSlip.picks.some(p => p.id === prop.id)) {
       return; // Already in slip
@@ -861,7 +867,7 @@ function SlipBuilderPage() {
                   </div>
                   {pick.bookmakerOdds && pick.bookmakerOdds.length > 1 && (
                     <div className="mt-3 space-y-2">
-                      <p className="font-mono text-[9px] uppercase text-muted-foreground">Compare Odds</p>
+                      <p className="font-mono text-[9px] uppercase text-muted-foreground">Compare Odds ({pick.bookmakerOdds.length} books)</p>
                       <div className="flex flex-wrap gap-2">
                         {pick.bookmakerOdds.map((bo, idx) => (
                           <button
@@ -877,6 +883,11 @@ function SlipBuilderPage() {
                           </button>
                         ))}
                       </div>
+                    </div>
+                  )}
+                  {(!pick.bookmakerOdds || pick.bookmakerOdds.length <= 1) && (
+                    <div className="mt-3">
+                      <p className="text-[9px] text-muted-foreground">No multiple odds available. Add fresh pick to see comparison.</p>
                     </div>
                   )}
                 </div>
