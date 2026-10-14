@@ -1891,18 +1891,62 @@ class NhlWebApiProvider implements NhlDataProvider {
       // Return top props as snipes (any with valid edge > 0 and probability > 0)
       // This includes both NHL stats and sportsbook-implied probabilities
       const snipes = props.filter(p => p.edge !== null && p.edge > 0 && p.overProbability > 0).slice(0, 10);
-      
-      // Map props to snipes schema format
-      const snipesMapped = snipes.map(p => ({
-        ...p,
-        score: p.modelProjection || 0,
-        goalProbability: p.overProbability || 0,
-        sogProjection: null,
-        pointProbability: null,
-        assistProbability: null,
-        factors: []
-      }));
-      
+
+      // Map props to snipes schema format with calculated projections
+      const snipesMapped = snipes.map(p => {
+        const seasonStats = (p.player as any).seasonStats;
+        const games = Math.max(1, seasonStats?.games || 1);
+        
+        // Calculate per-game stats
+        const goalsPerGame = (seasonStats?.goals || 0) / games;
+        const assistsPerGame = (seasonStats?.assists || 0) / games;
+        const pointsPerGame = (seasonStats?.points || 0) / games;
+        const sogPerGame = (seasonStats?.sog || 0) / games;
+        const savesPerGame = (seasonStats?.saves || 0) / games;
+        const blocksPerGame = (seasonStats?.blocked || 0) / games;
+        const hitsPerGame = (seasonStats?.hits || 0) / games;
+
+        // Calculate projections based on position
+        const position = p.player.position || 'F';
+        let sogProjection = null;
+        let pointProjection = null;
+        let assistProjection = null;
+        let savesProjection = null;
+        let blocksProjection = null;
+        let hitsProjection = null;
+
+        if (position === 'G') {
+          // Goalies: saves based on recent performance
+          savesProjection = savesPerGame > 0 ? savesPerGame : 25;
+        } else if (position === 'D') {
+          // Defensemen: shots, blocks, hits
+          sogProjection = sogPerGame > 0 ? sogPerGame : 2.5;
+          blocksProjection = blocksPerGame > 0 ? blocksPerGame : 3;
+          hitsProjection = hitsPerGame > 0 ? hitsPerGame : 2;
+          pointProjection = pointPerGame > 0 ? pointPerGame : 0.4;
+          assistProjection = assistsPerGame > 0 ? assistsPerGame : 0.3;
+        } else {
+          // Forwards: shots, points, assists
+          sogProjection = sogPerGame > 0 ? sogPerGame : 3;
+          pointProjection = pointPerGame > 0 ? pointPerGame : 0.6;
+          assistProjection = assistsPerGame > 0 ? assistsPerGame : 0.4;
+          hitsProjection = hitsPerGame > 0 ? hitsPerGame : 1.5;
+        }
+
+        return {
+          ...p,
+          score: p.modelProjection || 0,
+          goalProbability: p.overProbability || 0,
+          sogProjection,
+          pointProjection,
+          assistProbability: assistProjection,
+          savesProjection,
+          blocksProjection,
+          hitsProjection,
+          factors: []
+        };
+      });
+
       try {
         return GetSnipesResponse.parse(snipesMapped);
       } catch (error) {

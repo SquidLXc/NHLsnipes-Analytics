@@ -22,6 +22,12 @@ export interface Snipe {
   /** @nullable */
   assistProbability: number | null;
   /** @nullable */
+  savesProjection: number | null;
+  /** @nullable */
+  blocksProjection: number | null;
+  /** @nullable */
+  hitsProjection: number | null;
+  /** @nullable */
   modelProjection: number | null;
   /** @nullable */
   line: number | null;
