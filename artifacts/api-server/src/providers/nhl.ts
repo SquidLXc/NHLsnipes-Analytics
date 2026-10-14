@@ -1212,9 +1212,21 @@ class NhlWebApiProvider implements NhlDataProvider {
       const oddsMap = new Map<string, { odds: number; line: number | null; bookmaker: string }>();
       const bookmakerOddsMap = new Map<string, Array<{ odds: number; line: number | null; bookmaker: string }>>();
 
+      // Priority order for primary odds (DraftKings first, then FanDuel, then others)
+      const bookmakerPriority = ['DraftKings', 'FanDuel', 'BetMGM'];
+
       for (const prop of playerPropsOdds) {
         const propCanonical = canonicalPlayerName(prop.playerName);
-        oddsMap.set(propCanonical, { odds: prop.odds, line: prop.line ?? null, bookmaker: prop.bookmaker });
+        
+        // Only set primary odds if not already set, or if this bookmaker has higher priority
+        const currentPriority = oddsMap.has(propCanonical) 
+          ? bookmakerPriority.indexOf(oddsMap.get(propCanonical)!.bookmaker)
+          : -1;
+        const newPriority = bookmakerPriority.indexOf(prop.bookmaker);
+        
+        if (!oddsMap.has(propCanonical) || newPriority < currentPriority) {
+          oddsMap.set(propCanonical, { odds: prop.odds, line: prop.line ?? null, bookmaker: prop.bookmaker });
+        }
 
         // Also add to bookmakerOddsMap for multi-bookmaker support
         if (!bookmakerOddsMap.has(propCanonical)) {
@@ -1232,7 +1244,17 @@ class NhlWebApiProvider implements NhlDataProvider {
           const parts = prop.playerName.split(',').map(p => p.trim());
           if (parts.length === 2) {
             const firstLast = canonicalPlayerName(`${parts[1]} ${parts[0]}`);
-            oddsMap.set(firstLast, { odds: prop.odds, line: prop.line ?? null, bookmaker: prop.bookmaker });
+            
+            // Apply same priority logic for name variants
+            const currentPriority = oddsMap.has(firstLast) 
+              ? bookmakerPriority.indexOf(oddsMap.get(firstLast)!.bookmaker)
+              : -1;
+            const newPriority = bookmakerPriority.indexOf(prop.bookmaker);
+            
+            if (!oddsMap.has(firstLast) || newPriority < currentPriority) {
+              oddsMap.set(firstLast, { odds: prop.odds, line: prop.line ?? null, bookmaker: prop.bookmaker });
+            }
+            
             if (!bookmakerOddsMap.has(firstLast)) {
               bookmakerOddsMap.set(firstLast, []);
             }
