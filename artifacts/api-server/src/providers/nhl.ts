@@ -1171,12 +1171,19 @@ class NhlWebApiProvider implements NhlDataProvider {
 
   async getProps() {
     try {
-      const [games, players, playerPropsOdds, puckapiOdds] = await Promise.all([
+      const [games, players, playerPropsOdds] = await Promise.all([
         this.getGames().catch(() => GetGamesResponse.parse([])), // Handle timeout gracefully
         this.getPlayers().catch(() => GetPlayersResponse.parse([])), // Handle timeout gracefully
         this.getPlayerPropsOdds(),
-        this.getPuckapiPlayerProps(),
       ]);
+
+      // Fetch PuckAPI odds separately - don't fail if it errors
+      let puckapiOdds = new Map<string, Array<{ odds: number; line: number | null; bookmaker: string }>>();
+      try {
+        puckapiOdds = await this.getPuckapiPlayerProps();
+      } catch (error) {
+        console.error("PuckAPI fetch failed, continuing without it:", error);
+      }
 
       if (!games.length || !players.length) {
         return GetPropsResponse.parse([]);
