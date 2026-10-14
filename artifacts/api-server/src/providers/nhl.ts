@@ -184,6 +184,7 @@ const PRIORITY_AFFILIATE_IDS = "19,23,22,3"; // DraftKings, FanDuel, BetMGM, Pin
 
 // Parlay API configuration for player props
 const PARLAY_API_KEY = process.env.PARLAY_API_KEY;
+const PUCKAPI_API_KEY = process.env.PUCKAPI_API_KEY;
 const PARLAY_BASE_URL = "https://parlay-api.com/v1";
 const PARLAY_NHL_SPORT_KEY = "icehockey_nhl";
 const syncHealth: DataHealth = {
@@ -1170,10 +1171,11 @@ class NhlWebApiProvider implements NhlDataProvider {
 
   async getProps() {
     try {
-      const [games, players, playerPropsOdds] = await Promise.all([
+      const [games, players, playerPropsOdds, puckapiOdds] = await Promise.all([
         this.getGames().catch(() => GetGamesResponse.parse([])), // Handle timeout gracefully
         this.getPlayers().catch(() => GetPlayersResponse.parse([])), // Handle timeout gracefully
         this.getPlayerPropsOdds(),
+        this.getPuckapiPlayerProps(),
       ]);
 
       if (!games.length || !players.length) {
@@ -1237,6 +1239,24 @@ class NhlWebApiProvider implements NhlDataProvider {
       console.log(`=== TheRundown Player Props Debug ===`);
       console.log(`Total players with odds: ${oddsMap.size}`);
       console.log(`Sample players:`, Array.from(oddsMap.entries()).slice(0, 3).map(([k, v]) => `${k} -> ${v.bookmaker} @ ${v.odds}`));
+
+      // Merge PuckAPI odds into bookmakerOddsMap
+      console.log(`=== Merging PuckAPI odds ===`);
+      for (const [canonicalName, puckapiOdds] of puckapiOdds.entries()) {
+        if (!bookmakerOddsMap.has(canonicalName)) {
+          bookmakerOddsMap.set(canonicalName, []);
+        }
+        const existingOdds = bookmakerOddsMap.get(canonicalName)!;
+        // Add PuckAPI odds that aren't duplicates
+        for (const puckOdds of puckapiOdds) {
+          const isDuplicate = existingOdds.some(o => o.bookmaker === puckOdds.bookmaker && o.odds === puckOdds.odds);
+          if (!isDuplicate) {
+            existingOdds.push(puckOdds);
+          }
+        }
+      }
+      console.log(`After merge: ${bookmakerOddsMap.size} players with bookmaker odds`);
+      console.log(`Sample merged:`, Array.from(bookmakerOddsMap.entries()).slice(0, 3).map(([k, v]) => `${k}: ${v.length} books`));
 
       // Calculate predictions for each player
       const props = await Promise.all(
@@ -1671,6 +1691,82 @@ class NhlWebApiProvider implements NhlDataProvider {
     } catch (error) {
       console.error("Error fetching player props from Parlay API:", error);
       return [];
+    }
+  }
+
+  async getPuckapiPlayerProps(): Promise<Map<string, Array<{ odds: number; line: number | null; bookmaker: string }>>> {
+    if (!PUCKAPI_API_KEY) {
+      console.log("PUCKAPI_API_KEY not configured, skipping PuckAPI");
+      return new Map();
+    }
+
+    try {
+      // PuckAPI requires game_id, so we need to get today's games first
+      const games = await this.getGames();
+      if (!games.length) {
+        console.log("No games available for PuckAPI");
+        return new Map();
+      }
+
+      const bookmakerOddsMap = new Map<string, Array<{ odds: number; line: number | null; bookmaker: string }>>();
+
+      // Fetch odds for each game (limit to first 5 games to save credits)
+      for (const game of games.slice(0, 5)) {
+        try {
+          const response = await fetch('https://mcp.puckapi.com/v1/get_player_props', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': PUCKAPI_API_KEY,
+            },
+            body: JSON.stringify({
+              game_id: game.id,
+              market: 'player_goals',
+            }),
+          });
+
+          if (!response.ok) {
+            console.error(`PuckAPI error for game ${game.id}:`, response.status);
+            continue;
+          }
+
+          const data = await response.json();
+          console.log(`PuckAPI response for game ${game.id}:`, JSON.stringify(data).slice(0, 500));
+
+          if (data.props && Array.isArray(data.props)) {
+            for (const prop of data.props) {
+              const playerName = prop.player_name;
+              const canonicalName = playerName.toLowerCase().replace(/[^a-z]/g, '');
+
+              if (!bookmakerOddsMap.has(canonicalName)) {
+                bookmakerOddsMap.set(canonicalName, []);
+              }
+
+              // Add odds from each bookmaker
+              if (prop.all_books && Array.isArray(prop.all_books)) {
+                for (const book of prop.all_books) {
+                  bookmakerOddsMap.get(canonicalName)!.push({
+                    odds: book.over_juice || book.over_price || 0,
+                    line: book.line || 0,
+                    bookmaker: book.sportsbook_display || book.sportsbook || 'Unknown',
+                  });
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Error fetching PuckAPI odds for game ${game.id}:`, error);
+        }
+      }
+
+      console.log(`=== PuckAPI Player Props ===`);
+      console.log(`Total players with odds: ${bookmakerOddsMap.size}`);
+      console.log(`Sample:`, Array.from(bookmakerOddsMap.entries()).slice(0, 3).map(([name, odds]) => `${name}: ${odds.length} books`));
+
+      return bookmakerOddsMap;
+    } catch (error) {
+      console.error("Error fetching from PuckAPI:", error);
+      return new Map();
     }
   }
 
