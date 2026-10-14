@@ -1170,6 +1170,7 @@ class NhlWebApiProvider implements NhlDataProvider {
   }
 
   async getProps() {
+    console.log(`=== getProps called ===`);
     try {
       const [games, players, playerPropsOdds] = await Promise.all([
         this.getGames().catch(() => GetGamesResponse.parse([])), // Handle timeout gracefully
@@ -1177,6 +1178,7 @@ class NhlWebApiProvider implements NhlDataProvider {
         this.getPlayerPropsOdds(),
       ]);
 
+      console.log(`=== About to call PuckAPI ===`);
       // Fetch PuckAPI odds separately - don't fail if it errors
       let puckapiOdds = new Map<string, Array<{ odds: number; line: number | null; bookmaker: string }>>();
       try {
@@ -1184,6 +1186,7 @@ class NhlWebApiProvider implements NhlDataProvider {
       } catch (error) {
         console.error("PuckAPI fetch failed, continuing without it:", error);
       }
+      console.log(`=== PuckAPI call complete, got ${puckapiOdds.size} players ===`);
 
       if (!games.length || !players.length) {
         return GetPropsResponse.parse([]);
