@@ -1728,12 +1728,12 @@ class NhlWebApiProvider implements NhlDataProvider {
 
       const bookmakerOddsMap = new Map<string, Array<{ odds: number; line: number | null; bookmaker: string }>>();
 
-      // Fetch odds for each game (limit to first 3 games to save credits and avoid rate limits)
-      for (const game of games.slice(0, 3)) {
+      // Fetch odds for each game (limit to first 1 game to save credits and avoid rate limits)
+      for (const game of games.slice(0, 1)) {
         try {
           // Add delay between requests to avoid rate limiting
           if (games.indexOf(game) > 0) {
-            await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+            await new Promise(resolve => setTimeout(resolve, 5000)); // 5 second delay
           }
 
           const response = await fetch('https://mcp.puckapi.com/v1/get_player_props', {
