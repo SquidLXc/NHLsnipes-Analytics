@@ -1156,7 +1156,11 @@ class NhlWebApiProvider implements NhlDataProvider {
       games.forEach((game) => {
         opponentByTeam.set(game.homeTeam.id, game.awayTeam);
         opponentByTeam.set(game.awayTeam.id, game.homeTeam);
+        // Also map by abbreviation for backup lookup
+        opponentByTeam.set(game.homeTeam.abbreviation, game.awayTeam);
+        opponentByTeam.set(game.awayTeam.abbreviation, game.homeTeam);
       });
+      console.log(`getGoalies: Opponent map size: ${opponentByTeam.size}`);
 
       const goalies = players.filter((player) => player.position === "G");
       console.log(`getGoalies: Goalies found: ${goalies.length}`);
@@ -1203,8 +1207,8 @@ class NhlWebApiProvider implements NhlDataProvider {
            jerseyNumber: player.jerseyNumber,
            headshotUrl: player.headshotUrl,
           team: player.team,
-          opponent: opponentByTeam.get(player.team.id) ?? null,
-          status: "unknown",
+          opponent: opponentByTeam.get(player.team.id) || opponentByTeam.get(player.team.abbreviation) || null,
+          status: (seasonStats && seasonStats.saves > 0) ? "confirmed" : "projected",
           projectedSaves: Math.round(savesPerGame * 10) / 10 || null,
           projectedShotsAgainst: Math.round(shotsAgainstPerGame * 10) / 10 || null,
           savePercentage: Math.round(savePercentage * 1000) / 1000 || null,
