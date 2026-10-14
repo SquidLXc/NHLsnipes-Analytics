@@ -1713,6 +1713,10 @@ class NhlWebApiProvider implements NhlDataProvider {
     console.log(`PUCKAPI_API_KEY configured: ${!!PUCKAPI_API_KEY}`);
     console.log(`PUCKAPI_API_KEY length: ${PUCKAPI_API_KEY?.length || 0}`);
     
+    // Temporarily disable PuckAPI due to 402/payment errors
+    console.log("PuckAPI temporarily disabled due to authentication issues");
+    return new Map();
+    
     if (!PUCKAPI_API_KEY) {
       console.log("PUCKAPI_API_KEY not configured, skipping PuckAPI");
       return new Map();
