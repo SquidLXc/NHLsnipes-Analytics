@@ -1706,6 +1706,10 @@ class NhlWebApiProvider implements NhlDataProvider {
   }
 
   async getPuckapiPlayerProps(): Promise<Map<string, Array<{ odds: number; line: number | null; bookmaker: string }>>> {
+    console.log(`=== PuckAPI Check ===`);
+    console.log(`PUCKAPI_API_KEY configured: ${!!PUCKAPI_API_KEY}`);
+    console.log(`PUCKAPI_API_KEY length: ${PUCKAPI_API_KEY?.length || 0}`);
+    
     if (!PUCKAPI_API_KEY) {
       console.log("PUCKAPI_API_KEY not configured, skipping PuckAPI");
       return new Map();
