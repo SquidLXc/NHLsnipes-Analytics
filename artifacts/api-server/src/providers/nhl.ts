@@ -1247,23 +1247,27 @@ class NhlWebApiProvider implements NhlDataProvider {
       console.log(`Total players with odds: ${oddsMap.size}`);
       console.log(`Sample players:`, Array.from(oddsMap.entries()).slice(0, 3).map(([k, v]) => `${k} -> ${v.bookmaker} @ ${v.odds}`));
 
-      // Merge PuckAPI odds into bookmakerOddsMap
-      console.log(`=== Merging PuckAPI odds ===`);
-      for (const [canonicalName, puckapiOdds] of puckapiOdds.entries()) {
-        if (!bookmakerOddsMap.has(canonicalName)) {
-          bookmakerOddsMap.set(canonicalName, []);
-        }
-        const existingOdds = bookmakerOddsMap.get(canonicalName)!;
-        // Add PuckAPI odds that aren't duplicates
-        for (const puckOdds of puckapiOdds) {
-          const isDuplicate = existingOdds.some(o => o.bookmaker === puckOdds.bookmaker && o.odds === puckOdds.odds);
-          if (!isDuplicate) {
-            existingOdds.push(puckOdds);
+      // Merge PuckAPI odds into bookmakerOddsMap (if available)
+      if (puckapiOdds && puckapiOdds.size > 0) {
+        console.log(`=== Merging PuckAPI odds ===`);
+        for (const [canonicalName, puckapiOddsForPlayer] of puckapiOdds.entries()) {
+          if (!bookmakerOddsMap.has(canonicalName)) {
+            bookmakerOddsMap.set(canonicalName, []);
+          }
+          const existingOdds = bookmakerOddsMap.get(canonicalName)!;
+          // Add PuckAPI odds that aren't duplicates
+          for (const puckOdds of puckapiOddsForPlayer) {
+            const isDuplicate = existingOdds.some(o => o.bookmaker === puckOdds.bookmaker && o.odds === puckOdds.odds);
+            if (!isDuplicate) {
+              existingOdds.push(puckOdds);
+            }
           }
         }
+        console.log(`After merge: ${bookmakerOddsMap.size} players with bookmaker odds`);
+        console.log(`Sample merged:`, Array.from(bookmakerOddsMap.entries()).slice(0, 3).map(([k, v]) => `${k}: ${v.length} books`));
+      } else {
+        console.log(`No PuckAPI odds to merge, using Parlay API only`);
       }
-      console.log(`After merge: ${bookmakerOddsMap.size} players with bookmaker odds`);
-      console.log(`Sample merged:`, Array.from(bookmakerOddsMap.entries()).slice(0, 3).map(([k, v]) => `${k}: ${v.length} books`));
 
       // Calculate predictions for each player
       const props = await Promise.all(
