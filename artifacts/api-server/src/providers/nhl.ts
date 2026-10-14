@@ -1728,9 +1728,14 @@ class NhlWebApiProvider implements NhlDataProvider {
 
       const bookmakerOddsMap = new Map<string, Array<{ odds: number; line: number | null; bookmaker: string }>>();
 
-      // Fetch odds for each game (limit to first 5 games to save credits)
-      for (const game of games.slice(0, 5)) {
+      // Fetch odds for each game (limit to first 3 games to save credits and avoid rate limits)
+      for (const game of games.slice(0, 3)) {
         try {
+          // Add delay between requests to avoid rate limiting
+          if (games.indexOf(game) > 0) {
+            await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+          }
+
           const response = await fetch('https://mcp.puckapi.com/v1/get_player_props', {
             method: 'POST',
             headers: {
@@ -1742,6 +1747,11 @@ class NhlWebApiProvider implements NhlDataProvider {
               market: 'player_goals',
             }),
           });
+
+          if (response.status === 429) {
+            console.error(`PuckAPI rate limited for game ${game.id}, skipping remaining games`);
+            break; // Stop fetching if rate limited
+          }
 
           if (!response.ok) {
             console.error(`PuckAPI error for game ${game.id}:`, response.status);
