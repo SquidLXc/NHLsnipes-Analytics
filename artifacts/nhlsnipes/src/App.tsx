@@ -532,6 +532,7 @@ function PropsPage() {
   const all = useGetProps(undefined, { query: { queryKey: getGetPropsQueryKey() } });
   const rows = (all.data as Prop[] | undefined) || [];
   const topEdges = rows.filter(p => p.edge !== null && p.edge > 0.05).slice(0, 10);
+  const [watchlist, setWatchlist] = useWatchlist();
 
   return <>
     <PageHeader
@@ -551,7 +552,7 @@ function PropsPage() {
           Players with the highest calculated edge based on AI probability vs sportsbook odds
         </p>
         <div className="space-y-3">
-          {topEdges.map((prop, index) => <TopEdgeCard key={prop.id} prop={prop} rank={index + 1} />)}
+          {topEdges.map((prop, index) => <TopEdgeCard key={prop.id} prop={prop} rank={index + 1} watchlist={watchlist} onWatch={setWatchlist} />)}
         </div>
       </div>
     )}
@@ -562,13 +563,14 @@ function PropsPage() {
     </div>
     
     <QueryState loading={all.isLoading} error={all.isError} empty={!all.isLoading && !all.isError && rows.length === 0} onRetry={() => all.refetch()}>
-      <div className="space-y-2">{rows.map((prop) => <PropCard key={prop.id} prop={prop} />)}</div>
+      <div className="space-y-2">{rows.map((prop) => <PropCard key={prop.id} prop={prop} watchlist={watchlist} onWatch={setWatchlist} />)}</div>
     </QueryState>
   </>;
 }
 
-function TopEdgeCard({ prop, rank }: { prop: Prop; rank: number }) {
+function TopEdgeCard({ prop, rank, watchlist, onWatch }: { prop: Prop; rank: number; watchlist: string[]; onWatch: (id: string) => void }) {
   const available = prop.lineStatus === 'available';
+  const saved = watchlist.includes(prop.player.id);
   // Use prop.odds for the American odds price, not prop.line (which is the bet line)
   const americanOdds = prop.odds !== null ? (prop.odds > 0 ? `+${Math.round(prop.odds)}` : Math.round(prop.odds).toString()) : '—';
   // Strip "(implied)" suffix for cleaner display
@@ -630,6 +632,7 @@ function TopEdgeCard({ prop, rank }: { prop: Prop; rank: number }) {
       </div>
 
       <div className="flex items-center gap-3">
+        <button data-testid={`button-watch-top-${prop.player.id}`} onClick={() => onWatch(prop.player.id)} className={`rounded-lg border p-2 transition-colors ${saved ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-primary'}`}><Star size={14} fill={saved ? 'currentColor' : 'none'} /></button>
         <PlayerImage player={prop.player} size="md" />
         <div>
           <Link data-testid={`link-prop-player-${prop.player.id}`} href={`/players/${prop.player.id}`} className="text-base font-bold hover:text-primary">
@@ -676,8 +679,9 @@ function TopEdgeCard({ prop, rank }: { prop: Prop; rank: number }) {
   );
 }
 
-function PropCard({ prop }: { prop: Prop }) {
+function PropCard({ prop, watchlist, onWatch }: { prop: Prop; watchlist: string[]; onWatch: (id: string) => void }) {
   const available = prop.lineStatus === 'available';
+  const saved = watchlist.includes(prop.player.id);
   // Use prop.odds for the American odds price, not prop.line (which is the bet line)
   const americanOdds = prop.odds !== null ? (prop.odds > 0 ? `+${Math.round(prop.odds)}` : Math.round(prop.odds).toString()) : '—';
   // Strip "(implied)" suffix for cleaner display
@@ -738,7 +742,7 @@ function PropCard({ prop }: { prop: Prop }) {
     setIsInSlip(true);
   };
 
-  return <div data-testid={`card-prop-${prop.id}`} className="grid gap-4 rounded-xl border border-border bg-card/70 p-4 transition-colors hover:border-secondary/40 md:grid-cols-[1.5fr_.9fr_.9fr_.8fr_auto] md:items-center"><div className="flex items-center gap-3"><PlayerImage player={prop.player} size="md" /><div><Link data-testid={`link-prop-player-${prop.player.id}`} href={`/players/${prop.player.id}`} className="text-sm font-bold hover:text-primary">{prop.player.fullName}</Link><p className="mt-1 text-[10px] text-muted-foreground">{prop.player.team.abbreviation} vs {prop.opponent.abbreviation} · {prop.market}</p></div></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">AI Probability</p><p className="mt-1 text-lg font-bold text-primary">{pct(prop.overProbability)}</p></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">Sportsbook Odds</p><p className={`mt-1 text-lg font-bold ${available ? 'text-foreground' : 'text-muted-foreground'}`}>{available ? americanOdds : 'N/A'}</p><p className="text-[9px] text-muted-foreground">{available ? sourceLabel : 'not available'}</p></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">Edge</p><p className={`mt-1 text-lg font-bold ${prop.edge && prop.edge > 0 ? 'text-accent' : 'text-muted-foreground'}`}>{pct(prop.edge)}</p></div><div className="flex items-center gap-2 md:justify-end"><span className={`rounded-full border px-2 py-1 text-[9px] uppercase tracking-wider ${available ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border text-muted-foreground'}`}>{available ? 'live' : 'no odds'}</span><span className={`rounded-full px-2 py-1 text-[9px] uppercase ${prop.confidence === 'ELITE' || prop.confidence === 'STRONG' ? 'bg-accent/10 text-accent' : 'bg-secondary/10 text-secondary'}`}>{prop.confidence || 'watch'}</span>{available && !isInSlip && <button onClick={addToSlip} className="rounded-lg bg-primary px-2 py-1 text-[9px] font-semibold text-primary-foreground hover:bg-primary/90">Add</button>}</div></div>;
+  return <div data-testid={`card-prop-${prop.id}`} className="grid gap-4 rounded-xl border border-border bg-card/70 p-4 transition-colors hover:border-secondary/40 md:grid-cols-[auto_1.5fr_.9fr_.9fr_.8fr_auto] md:items-center"><div className="flex items-center gap-3"><button data-testid={`button-watch-prop-${prop.player.id}`} onClick={() => onWatch(prop.player.id)} className={`rounded-lg border p-2 transition-colors ${saved ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-primary'}`}><Star size={14} fill={saved ? 'currentColor' : 'none'} /></button><PlayerImage player={prop.player} size="md" /><div><Link data-testid={`link-prop-player-${prop.player.id}`} href={`/players/${prop.player.id}`} className="text-sm font-bold hover:text-primary">{prop.player.fullName}</Link><p className="mt-1 text-[10px] text-muted-foreground">{prop.player.team.abbreviation} vs {prop.opponent.abbreviation} · {prop.market}</p></div></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">AI Probability</p><p className="mt-1 text-lg font-bold text-primary">{pct(prop.overProbability)}</p></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">Sportsbook Odds</p><p className={`mt-1 text-lg font-bold ${available ? 'text-foreground' : 'text-muted-foreground'}`}>{available ? americanOdds : 'N/A'}</p><p className="text-[9px] text-muted-foreground">{available ? sourceLabel : 'not available'}</p></div><div><p className="font-mono text-[10px] uppercase text-muted-foreground">Edge</p><p className={`mt-1 text-lg font-bold ${prop.edge && prop.edge > 0 ? 'text-accent' : 'text-muted-foreground'}`}>{pct(prop.edge)}</p></div><div className="flex items-center gap-2 md:justify-end"><span className={`rounded-full border px-2 py-1 text-[9px] uppercase tracking-wider ${available ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border text-muted-foreground'}`}>{available ? 'live' : 'no odds'}</span><span className={`rounded-full px-2 py-1 text-[9px] uppercase ${prop.confidence === 'ELITE' || prop.confidence === 'STRONG' ? 'bg-accent/10 text-accent' : 'bg-secondary/10 text-secondary'}`}>{prop.confidence || 'watch'}</span>{available && !isInSlip && <button onClick={addToSlip} className="rounded-lg bg-primary px-2 py-1 text-[9px] font-semibold text-primary-foreground hover:bg-primary/90">Add</button>}</div></div>;
 }
 
 function SlipBuilderPage() {
