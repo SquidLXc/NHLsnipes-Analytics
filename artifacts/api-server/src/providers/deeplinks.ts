@@ -75,7 +75,7 @@ async function fetchSharpAPIOdds(): Promise<SharpAPIOddsItem[]> {
   try {
     console.log("Fetching SharpAPI odds for NHL player props");
     const response = await fetch(
-      `${SHARPAPI_BASE_URL}/odds?sport=hockey&league=NHL&market=player_goals_anytime&book=draftkings`,
+      `${SHARPAPI_BASE_URL}/odds?sport=hockey&league=NHL&book=draftkings`,
       {
         headers: {
           "x-api-key": SHARPAPI_API_KEY,
@@ -192,23 +192,32 @@ function matchSelectionToOdds(selection: Selection, odds: SharpAPIOddsItem[]): S
     // Must be DraftKings
     if (odd.sportsbook.toLowerCase() !== "draftkings") continue;
 
-    // Must be player prop
-    if (!odd.is_player_prop) continue;
-
-    // Normalize odd data
+    // Must be player prop (check if selection contains player name, not team name)
     const oddPlayer = normalizePlayerName(odd.selection);
     const oddMarket = odd.market_type.toLowerCase();
     const oddHomeTeam = normalizeTeamName(odd.home_team);
     const oddAwayTeam = normalizeTeamName(odd.away_team);
     const oddLine = odd.line;
 
+    // Check if market is a player prop market (contains "player" or is goal-related)
+    const isPlayerPropMarket =
+      oddMarket.includes("player") ||
+      oddMarket.includes("goal") ||
+      oddMarket.includes("scorer") ||
+      oddMarket.includes("point") ||
+      oddMarket.includes("assist") ||
+      oddMarket.includes("shot");
+
+    if (!isPlayerPropMarket) continue;
+
     // Check if player name matches (contains match for flexibility)
     if (!oddPlayer.includes(normalizedPlayer) && !normalizedPlayer.includes(oddPlayer)) {
       continue;
     }
 
-    // Check if market matches
-    if (oddMarket !== normalizedMarket) {
+    // Check if market matches (more flexible matching)
+    if (oddMarket !== normalizedMarket &&
+        !oddMarket.includes("goal") && !normalizedMarket.includes("goal")) {
       continue;
     }
 
@@ -228,7 +237,7 @@ function matchSelectionToOdds(selection: Selection, odds: SharpAPIOddsItem[]): S
     }
 
     // If all checks pass, we have a match
-    console.log(`Matched selection: ${selection.playerName} to SharpAPI odds ID: ${odd.id}`);
+    console.log(`Matched selection: ${selection.playerName} to SharpAPI odds ID: ${odd.id} (market: ${odd.market_type})`);
     return odd;
   }
 
