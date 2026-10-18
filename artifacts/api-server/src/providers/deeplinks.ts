@@ -93,6 +93,11 @@ async function fetchSharpAPIOdds(): Promise<SharpAPIOddsItem[]> {
     const data = await response.json() as { data: SharpAPIOddsItem[] };
     console.log(`Fetched ${data.data.length} SharpAPI odds items`);
 
+    // Log a sample of the data for debugging
+    if (data.data.length > 0) {
+      console.log(`Sample SharpAPI odds item:`, JSON.stringify(data.data[0], null, 2));
+    }
+
     // Cache the result
     oddsCache.set(cacheKey, {
       data: data.data,
@@ -188,7 +193,12 @@ function matchSelectionToOdds(selection: Selection, odds: SharpAPIOddsItem[]): S
   const normalizedOpponent = normalizeTeamName(selection.opponent);
   const line = selection.line;
 
+  console.log(`  Normalized: player="${normalizedPlayer}", market="${normalizedMarket}", team="${normalizedTeam}", opponent="${normalizedOpponent}"`);
+
+  let checkedCount = 0;
   for (const odd of odds) {
+    checkedCount++;
+
     // Must be DraftKings
     if (odd.sportsbook.toLowerCase() !== "draftkings") continue;
 
@@ -241,6 +251,7 @@ function matchSelectionToOdds(selection: Selection, odds: SharpAPIOddsItem[]): S
     return odd;
   }
 
+  console.log(`  Checked ${checkedCount} odds items, no match found`);
   return null;
 }
 
@@ -274,6 +285,8 @@ export async function getDraftKingsDeepLinks(selections: Selection[]): Promise<D
 
     // Match each selection to SharpAPI odds
     for (const selection of selections) {
+      console.log(`Trying to match: ${selection.playerName} (${selection.market}, ${selection.team} vs ${selection.opponent})`);
+
       const matchedOdd = matchSelectionToOdds(selection, sharpAPIOdds);
       if (matchedOdd) {
         matchedOddsIds.push(matchedOdd.id);
