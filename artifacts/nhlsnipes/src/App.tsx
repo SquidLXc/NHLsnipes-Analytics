@@ -993,14 +993,49 @@ function SlipBuilderPage() {
                 </p>
               </div>
 
-              <a
-                href={SPORTSBOOKS.find(b => b.id === slip.selectedSportsbook)?.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-              >
-                Open {slip.selectedSportsbook} <ExternalLink size={14} />
-              </a>
+              {slip.selectedSportsbook === 'DraftKings' && slip.picks.length > 0 ? (
+                <button
+                  onClick={async () => {
+                    try {
+                      const response = await fetch('/api/deeplinks/draftkings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          selections: slip.picks.map(p => ({
+                            playerName: p.playerName,
+                            market: p.market,
+                            line: p.line,
+                            team: p.playerTeam,
+                            opponent: p.opponent
+                          }))
+                        })
+                      });
+                      const data = await response.json();
+                      if (data.deepLinks?.desktop) {
+                        window.open(data.deepLinks.desktop, '_blank');
+                      } else {
+                        // Fallback to generic URL
+                        window.open(SPORTSBOOKS.find(b => b.id === 'DraftKings')?.url, '_blank');
+                      }
+                    } catch (error) {
+                      console.error('Deep link fetch failed, using fallback:', error);
+                      window.open(SPORTSBOOKS.find(b => b.id === 'DraftKings')?.url, '_blank');
+                    }
+                  }}
+                  className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+                >
+                  Open DraftKings <ExternalLink size={14} />
+                </button>
+              ) : (
+                <a
+                  href={SPORTSBOOKS.find(b => b.id === slip.selectedSportsbook)?.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+                >
+                  Open {slip.selectedSportsbook} <ExternalLink size={14} />
+                </a>
+              )}
             </div>
           </div>
 

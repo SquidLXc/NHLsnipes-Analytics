@@ -3,6 +3,7 @@ import healthRouter from "./health";
 import nhlRouter from "./nhl";
 import discordAuthRouter from "./discord-auth";
 import adminRouter from "./admin";
+import deeplinksRouter from "./deeplinks";
 import { getNhlProvider } from "../providers/nhl";
 
 const router: IRouter = Router();
@@ -11,6 +12,7 @@ router.use(healthRouter);
 router.use("/nhl", nhlRouter);
 router.use("/auth/discord", discordAuthRouter);
 router.use("/admin", adminRouter);
+router.use("/deeplinks", deeplinksRouter);
 
 // Add direct routes for frontend compatibility (frontend calls without /nhl prefix)
 router.get("/dashboard/summary", async (req, res) => {
