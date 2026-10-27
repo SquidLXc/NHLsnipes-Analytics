@@ -153,7 +153,8 @@ function QueryState({ loading, error, empty, children, onRetry }: { loading?: bo
 }
 
 function TeamMark({ team, size = 'md' }: { team?: Team; size?: 'sm' | 'md' | 'lg' }) {
-  return <TeamCrest team={team} size={size} />;
+  const teamColor = team?.primaryColor || '#81ff57';
+  return <div style={{ animation: 'pulsing-glow 2s ease-in-out infinite', boxShadow: `0 0 0 2px ${teamColor}99, 0 0 20px ${teamColor}66, 0 0 40px ${teamColor}33, 0 0 60px ${teamColor}1a, 0 18px 60px rgba(0,0,0,.26)`, borderRadius: '50%', padding: '4px', display: 'inline-block' }}><TeamCrest team={team} size={size} /></div>;
 }
 
 function PageHeader({ eyebrow, title, copy, action }: { eyebrow: string; title: string; copy: string; action?: React.ReactNode }) {
@@ -1150,7 +1151,8 @@ function PlayersPage() {
   return <><PageHeader eyebrow="Player index / searchable" title="Players" copy="Move from a market edge to the underlying player record. Search stays server-backed and exact." action={<div className="relative"><Search size={15} className="absolute left-3 top-2.5 text-muted-foreground" /><input data-testid="input-player-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search player" className="w-52 rounded-lg border border-border bg-card py-2 pl-9 pr-3 text-xs outline-none placeholder:text-muted-foreground focus:border-primary/60" /></div>} /><QueryState loading={query.isLoading} error={query.isError} empty={!query.isLoading && !query.isError && rows.length === 0} onRetry={() => query.refetch()}><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{rows.map((player) => <PlayerCard key={player.id} player={player} />)}</div></QueryState></>;
 }
 function PlayerCard({ player }: { player: Player }) {
-  return <Link data-testid={`card-player-${player.id}`} href={`/players/${player.id}`} className="group flex items-center gap-3 pulsing-glow rounded-xl border border-border bg-card/70 p-4 hover:border-primary/40"><PlayerImage player={player} size="md" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold group-hover:text-primary">{player.fullName}</p><p className="mt-1 text-[10px] text-muted-foreground">{player.team.name} · {player.position}{player.jerseyNumber ? ` · #${player.jerseyNumber}` : ''}</p></div><TeamCrest team={player.team} size="xs" /><ChevronRight size={15} className="text-muted-foreground group-hover:text-primary" /></Link>;
+  const teamColor = player.team.primaryColor || '#81ff57';
+  return <Link data-testid={`card-player-${player.id}`} href={`/players/${player.id}`} className="group flex items-center gap-3 rounded-xl border border-border bg-card/70 p-4 hover:border-primary/40" style={{ animation: 'pulsing-glow 2s ease-in-out infinite', boxShadow: `0 0 0 2px ${teamColor}99, 0 0 20px ${teamColor}66, 0 0 40px ${teamColor}33, 0 0 60px ${teamColor}1a, 0 18px 60px rgba(0,0,0,.26)` }}><PlayerImage player={player} size="md" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold group-hover:text-primary">{player.fullName}</p><p className="mt-1 text-[10px] text-muted-foreground">{player.team.name} · {player.position}{player.jerseyNumber ? ` · #${player.jerseyNumber}` : ''}</p></div><TeamCrest team={player.team} size="xs" /><ChevronRight size={15} className="text-muted-foreground group-hover:text-primary" /></Link>;
 }
 
 function PlayerDetailPage() {
