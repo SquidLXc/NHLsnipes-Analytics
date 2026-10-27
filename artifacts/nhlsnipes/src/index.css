@@ -286,19 +286,19 @@
   .pulsing-glow { animation: pulsing-glow 2s ease-in-out infinite; }
   @keyframes pulsing-glow {
     0%, 100% {
-      box-shadow: 0 0 0 1px rgba(129,255,87,.2), 0 0 28px rgba(129,255,87,.07), 0 18px 60px rgba(0,0,0,.26);
+      box-shadow: 0 0 0 2px rgba(129,255,87,.6), 0 0 20px rgba(129,255,87,.4), 0 0 40px rgba(129,255,87,.2), 0 0 60px rgba(129,255,87,.1), 0 18px 60px rgba(0,0,0,.26);
     }
     50% {
-      box-shadow: 0 0 0 1px rgba(129,255,87,.4), 0 0 40px rgba(129,255,87,.15), 0 18px 60px rgba(0,0,0,.26);
+      box-shadow: 0 0 0 2px rgba(129,255,87,.9), 0 0 30px rgba(129,255,87,.6), 0 0 60px rgba(129,255,87,.4), 0 0 90px rgba(129,255,87,.2), 0 18px 60px rgba(0,0,0,.26);
     }
   }
   .pulsing-glow-purple { animation: pulsing-glow-purple 2s ease-in-out infinite; }
   @keyframes pulsing-glow-purple {
     0%, 100% {
-      box-shadow: 0 0 0 1px rgba(164,104,255,.2), 0 0 28px rgba(164,104,255,.07), 0 18px 60px rgba(0,0,0,.26);
+      box-shadow: 0 0 0 2px rgba(164,104,255,.6), 0 0 20px rgba(164,104,255,.4), 0 0 40px rgba(164,104,255,.2), 0 0 60px rgba(164,104,255,.1), 0 18px 60px rgba(0,0,0,.26);
     }
     50% {
-      box-shadow: 0 0 0 1px rgba(164,104,255,.4), 0 0 40px rgba(164,104,255,.15), 0 18px 60px rgba(0,0,0,.26);
+      box-shadow: 0 0 0 2px rgba(164,104,255,.9), 0 0 30px rgba(164,104,255,.6), 0 0 60px rgba(164,104,255,.4), 0 0 90px rgba(164,104,255,.2), 0 18px 60px rgba(0,0,0,.26);
     }
   }
   @media (prefers-reduced-motion: reduce) {
