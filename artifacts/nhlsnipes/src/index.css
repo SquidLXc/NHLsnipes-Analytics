@@ -283,6 +283,27 @@
   @media (prefers-reduced-motion: reduce) { .live-alert-marquee-active { animation: none; } }
   .rise { animation: rise .45s ease both; }
   @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .pulsing-glow { animation: pulsing-glow 2s ease-in-out infinite; }
+  @keyframes pulsing-glow {
+    0%, 100% {
+      box-shadow: 0 0 0 1px rgba(129,255,87,.2), 0 0 28px rgba(129,255,87,.07), 0 18px 60px rgba(0,0,0,.26);
+    }
+    50% {
+      box-shadow: 0 0 0 1px rgba(129,255,87,.4), 0 0 40px rgba(129,255,87,.15), 0 18px 60px rgba(0,0,0,.26);
+    }
+  }
+  .pulsing-glow-purple { animation: pulsing-glow-purple 2s ease-in-out infinite; }
+  @keyframes pulsing-glow-purple {
+    0%, 100% {
+      box-shadow: 0 0 0 1px rgba(164,104,255,.2), 0 0 28px rgba(164,104,255,.07), 0 18px 60px rgba(0,0,0,.26);
+    }
+    50% {
+      box-shadow: 0 0 0 1px rgba(164,104,255,.4), 0 0 40px rgba(164,104,255,.15), 0 18px 60px rgba(0,0,0,.26);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pulsing-glow, .pulsing-glow-purple { animation: none; }
+  }
 }
 
 /**
