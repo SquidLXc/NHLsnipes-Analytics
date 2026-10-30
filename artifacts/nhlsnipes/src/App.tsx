@@ -196,12 +196,12 @@ function QueryState({ loading, error, empty, children, onRetry }: { loading?: bo
 
 function TeamMark({ team, size = 'md' }: { team?: Team; size?: 'sm' | 'md' | 'lg' }) {
   const teamColor = getTeamColor(team);
-  return <div style={{ animation: 'pulsing-glow 2s ease-in-out infinite', boxShadow: `0 0 0 2px ${teamColor}99, 0 0 20px ${teamColor}66, 0 0 40px ${teamColor}33, 0 0 60px ${teamColor}1a, 0 18px 60px rgba(0,0,0,.26)`, borderRadius: '50%', padding: '4px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><TeamCrest team={team} size={size} /></div>;
+  return <div style={{ boxShadow: `0 0 0 2px ${teamColor}99, 0 0 20px ${teamColor}66, 0 0 40px ${teamColor}33, 0 0 60px ${teamColor}1a, 0 18px 60px rgba(0,0,0,.26)`, borderRadius: '50%', padding: '4px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><TeamCrest team={team} size={size} /></div>;
 }
 
 function PlayerMark({ player, id, name, headshotUrl, team, size = 'md' }: { player?: Pick<Player, 'id' | 'fullName' | 'headshotUrl' | 'team'>; id?: string; name?: string; headshotUrl?: string | null; team?: Team; size?: 'sm' | 'md' | 'lg' }) {
   const teamColor = getTeamColor(team || player?.team);
-  return <div style={{ animation: 'pulsing-glow 2s ease-in-out infinite', boxShadow: `0 0 0 2px ${teamColor}99, 0 0 20px ${teamColor}66, 0 0 40px ${teamColor}33, 0 0 60px ${teamColor}1a, 0 18px 60px rgba(0,0,0,.26)`, borderRadius: '50%', padding: '4px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><PlayerImage player={player} id={id} name={name} headshotUrl={headshotUrl} size={size} /></div>;
+  return <div style={{ boxShadow: `0 0 0 2px ${teamColor}99, 0 0 20px ${teamColor}66, 0 0 40px ${teamColor}33, 0 0 60px ${teamColor}1a, 0 18px 60px rgba(0,0,0,.26)`, borderRadius: '50%', padding: '4px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><PlayerImage player={player} id={id} name={name} headshotUrl={headshotUrl} size={size} /></div>;
 }
 
 function PageHeader({ eyebrow, title, copy, action }: { eyebrow: string; title: string; copy: string; action?: React.ReactNode }) {
