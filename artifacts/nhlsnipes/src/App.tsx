@@ -25,6 +25,48 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import NotFound from '@/pages/not-found';
 import '@/index.css';
 
+// NHL team color mapping (fallback if API doesn't provide colors)
+const TEAM_COLORS: Record<string, { primary: string; secondary: string }> = {
+  'ANA': { primary: '#B7984B', secondary: '#2D3E50' }, // Anaheim Ducks
+  'ARI': { primary: '#AC1C2D', secondary: '#000000' }, // Arizona Coyotes
+  'BOS': { primary: '#FFB81C', secondary: '#000000' }, // Boston Bruins
+  'BUF': { primary: '#00205B', secondary: '#FFB81C' }, // Buffalo Sabres
+  'CAR': { primary: '#D50032', secondary: '#000000' }, // Carolina Hurricanes
+  'CBJ': { primary: '#00205B', secondary: '#CE1126' }, // Columbus Blue Jackets
+  'CGY': { primary: '#C52032', secondary: '#000000' }, // Calgary Flames
+  'CHI': { primary: '#CF0A2C', secondary: '#000000' }, // Chicago Blackhawks
+  'COL': { primary: '#6F263D', secondary: '#236192' }, // Colorado Avalanche
+  'DAL': { primary: '#006847', secondary: '#8B8D8B' }, // Dallas Stars
+  'DET': { primary: '#C8102E', secondary: '#FFFFFF' }, // Detroit Red Wings
+  'EDM': { primary: '#FF4C00', secondary: '#00205B' }, // Edmonton Oilers
+  'FLA': { primary: '#C52032', secondary: '#041E42' }, // Florida Panthers
+  'LAK': { primary: '#111111', secondary: '#C3A575' }, // Los Angeles Kings
+  'MIN': { primary: '#154734', secondary: '#EAAA00' }, // Minnesota Wild
+  'MTL': { primary: '#AF1E2D', secondary: '#192168' }, // Montreal Canadiens
+  'NJD': { primary: '#000000', secondary: '#CE1126' }, // New Jersey Devils
+  'NSH': { primary: '#FFB81C', secondary: '#041E42' }, // Nashville Predators
+  'NYI': { primary: '#00539B', secondary: '#F47920' }, // New York Islanders
+  'NYR': { primary: '#0038A8', secondary: '#CE1126' }, // New York Rangers
+  'OTT': { primary: '#C52032', secondary: '#000000' }, // Ottawa Senators
+  'PHI': { primary: '#F74902', secondary: '#000000' }, // Philadelphia Flyers
+  'PIT': { primary: '#FFB81C', secondary: '#000000' }, // Pittsburgh Penguins
+  'SJS': { primary: '#006D75', secondary: '#000000' }, // San Jose Sharks
+  'SEA': { primary: '#72BF44', secondary: '#002244' }, // Seattle Kraken
+  'STL': { primary: '#002F87', secondary: '#C52032' }, // St. Louis Blues
+  'TBL': { primary: '#002868', secondary: '#FFFFFF' }, // Tampa Bay Lightning
+  'TOR': { primary: '#00205B', secondary: '#FFFFFF' }, // Toronto Maple Leafs
+  'VAN': { primary: '#00205B', secondary: '#00205B' }, // Vancouver Canucks
+  'VGK': { primary: '#B4975A', secondary: '#C1B49A' }, // Vegas Golden Knights
+  'WPG': { primary: '#041E42', secondary: '#AC1C2D' }, // Winnipeg Jets
+  'WSH': { primary: '#C8102E', secondary: '#041E42' }, // Washington Capitals
+};
+
+function getTeamColor(team?: Team | null): string {
+  if (!team) return '#81ff57';
+  if (team.primaryColor) return team.primaryColor;
+  return TEAM_COLORS[team.abbreviation]?.primary || '#81ff57';
+}
+
 const markets = ['all', 'goals', 'sog', 'points', 'assists', 'saves', 'blocks', 'hits'] as const;
 type Market = typeof markets[number];
 
@@ -153,12 +195,12 @@ function QueryState({ loading, error, empty, children, onRetry }: { loading?: bo
 }
 
 function TeamMark({ team, size = 'md' }: { team?: Team; size?: 'sm' | 'md' | 'lg' }) {
-  const teamColor = team?.primaryColor || '#81ff57';
+  const teamColor = getTeamColor(team);
   return <div style={{ animation: 'pulsing-glow 2s ease-in-out infinite', boxShadow: `0 0 0 2px ${teamColor}99, 0 0 20px ${teamColor}66, 0 0 40px ${teamColor}33, 0 0 60px ${teamColor}1a, 0 18px 60px rgba(0,0,0,.26)`, borderRadius: '50%', padding: '4px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><TeamCrest team={team} size={size} /></div>;
 }
 
 function PlayerMark({ player, id, name, headshotUrl, team, size = 'md' }: { player?: Pick<Player, 'id' | 'fullName' | 'headshotUrl' | 'team'>; id?: string; name?: string; headshotUrl?: string | null; team?: Team; size?: 'sm' | 'md' | 'lg' }) {
-  const teamColor = team?.primaryColor || player?.team.primaryColor || '#81ff57';
+  const teamColor = getTeamColor(team || player?.team);
   return <div style={{ animation: 'pulsing-glow 2s ease-in-out infinite', boxShadow: `0 0 0 2px ${teamColor}99, 0 0 20px ${teamColor}66, 0 0 40px ${teamColor}33, 0 0 60px ${teamColor}1a, 0 18px 60px rgba(0,0,0,.26)`, borderRadius: '50%', padding: '4px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><PlayerImage player={player} id={id} name={name} headshotUrl={headshotUrl} size={size} /></div>;
 }
 

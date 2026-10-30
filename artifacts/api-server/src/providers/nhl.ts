@@ -20,6 +20,42 @@ import {
 import { databaseConfigured, db, gamesTable, playersTable, teamsTable } from "@workspace/db";
 import { z } from "zod";
 
+// NHL team color mapping
+const TEAM_COLORS: Record<string, { primary: string; secondary: string }> = {
+  'ANA': { primary: '#B7984B', secondary: '#2D3E50' }, // Anaheim Ducks
+  'ARI': { primary: '#AC1C2D', secondary: '#000000' }, // Arizona Coyotes
+  'BOS': { primary: '#FFB81C', secondary: '#000000' }, // Boston Bruins
+  'BUF': { primary: '#00205B', secondary: '#FFB81C' }, // Buffalo Sabres
+  'CAR': { primary: '#D50032', secondary: '#000000' }, // Carolina Hurricanes
+  'CBJ': { primary: '#00205B', secondary: '#CE1126' }, // Columbus Blue Jackets
+  'CGY': { primary: '#C52032', secondary: '#000000' }, // Calgary Flames
+  'CHI': { primary: '#CF0A2C', secondary: '#000000' }, // Chicago Blackhawks
+  'COL': { primary: '#6F263D', secondary: '#236192' }, // Colorado Avalanche
+  'DAL': { primary: '#006847', secondary: '#8B8D8B' }, // Dallas Stars
+  'DET': { primary: '#C8102E', secondary: '#FFFFFF' }, // Detroit Red Wings
+  'EDM': { primary: '#FF4C00', secondary: '#00205B' }, // Edmonton Oilers
+  'FLA': { primary: '#C52032', secondary: '#041E42' }, // Florida Panthers
+  'LAK': { primary: '#111111', secondary: '#C3A575' }, // Los Angeles Kings
+  'MIN': { primary: '#154734', secondary: '#EAAA00' }, // Minnesota Wild
+  'MTL': { primary: '#AF1E2D', secondary: '#192168' }, // Montreal Canadiens
+  'NJD': { primary: '#000000', secondary: '#CE1126' }, // New Jersey Devils
+  'NSH': { primary: '#FFB81C', secondary: '#041E42' }, // Nashville Predators
+  'NYI': { primary: '#00539B', secondary: '#F47920' }, // New York Islanders
+  'NYR': { primary: '#0038A8', secondary: '#CE1126' }, // New York Rangers
+  'OTT': { primary: '#C52032', secondary: '#000000' }, // Ottawa Senators
+  'PHI': { primary: '#F74902', secondary: '#000000' }, // Philadelphia Flyers
+  'PIT': { primary: '#FFB81C', secondary: '#000000' }, // Pittsburgh Penguins
+  'SJS': { primary: '#006D75', secondary: '#000000' }, // San Jose Sharks
+  'SEA': { primary: '#72BF44', secondary: '#002244' }, // Seattle Kraken
+  'STL': { primary: '#002F87', secondary: '#C52032' }, // St. Louis Blues
+  'TBL': { primary: '#002868', secondary: '#FFFFFF' }, // Tampa Bay Lightning
+  'TOR': { primary: '#00205B', secondary: '#FFFFFF' }, // Toronto Maple Leafs
+  'VAN': { primary: '#00205B', secondary: '#00205B' }, // Vancouver Canucks
+  'VGK': { primary: '#B4975A', secondary: '#C1B49A' }, // Vegas Golden Knights
+  'WPG': { primary: '#041E42', secondary: '#AC1C2D' }, // Winnipeg Jets
+  'WSH': { primary: '#C8102E', secondary: '#041E42' }, // Washington Capitals
+};
+
 export type ProviderData = {
   dashboard: z.infer<typeof GetDashboardSummaryResponse>;
   games: z.infer<typeof GetGamesResponse>;
@@ -297,8 +333,8 @@ function teamFromRaw(raw: RawTeam, fallbackId?: string): NormalizedTeam {
     conference: raw.conferenceName ?? null,
     division: raw.divisionName ?? null,
     logoUrl: assetUrl(raw.logo || raw.teamLogo || raw.darkLogo),
-    primaryColor: raw.primaryColor ?? null,
-    secondaryColor: raw.secondaryColor ?? null,
+    primaryColor: raw.primaryColor ?? TEAM_COLORS[abbreviation]?.primary ?? null,
+    secondaryColor: raw.secondaryColor ?? TEAM_COLORS[abbreviation]?.secondary ?? null,
   };
   teamCache.set(id, team);
   teamCache.set(abbreviation, team);
