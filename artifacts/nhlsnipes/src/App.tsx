@@ -63,8 +63,10 @@ const TEAM_COLORS: Record<string, { primary: string; secondary: string }> = {
 
 function getTeamColor(team?: Team | null): string {
   if (!team) return '#81ff57';
-  if (team.primaryColor) return team.primaryColor;
-  return TEAM_COLORS[team.abbreviation]?.primary || '#81ff57';
+  // Always use the mapping as primary source since database may not have colors yet
+  const color = TEAM_COLORS[team.abbreviation]?.primary || team.primaryColor || '#81ff57';
+  console.log('Team color for', team.abbreviation, ':', color, 'from mapping:', TEAM_COLORS[team.abbreviation]?.primary, 'from team:', team.primaryColor);
+  return color;
 }
 
 const markets = ['all', 'goals', 'sog', 'points', 'assists', 'saves', 'blocks', 'hits'] as const;
