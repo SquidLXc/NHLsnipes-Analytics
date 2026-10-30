@@ -1,4 +1,4 @@
-import { Shield, UserRound } from 'lucide-react';
+import { Shield } from 'lucide-react';
 import { useState } from 'react';
 import type { Player, Team } from '@workspace/api-client-react';
 
@@ -68,6 +68,14 @@ export function PlayerImage({ player, id, name, headshotUrl, size = 'md', classN
   const label = name ?? player?.fullName ?? 'Player identity unavailable';
   const hasImage = Boolean(source) && !failed;
 
+  // Get initials for fallback
+  const getInitials = (fullName: string) => {
+    const parts = fullName.trim().split(' ');
+    if (parts.length === 0) return '?';
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  };
+
   return (
     <span
       data-testid={`asset-player-${player?.id || id || 'unknown'}`}
@@ -88,9 +96,10 @@ export function PlayerImage({ player, id, name, headshotUrl, size = 'md', classN
           />
         </>
       ) : (
-        <span className="asset-avatar-fallback relative z-[1] flex h-full w-full flex-col items-center justify-center gap-0.5 text-primary">
-          <UserRound size={size === 'hero' ? 39 : size === 'lg' ? 23 : 16} strokeWidth={1.35} />
-          <span className="font-mono text-[7px] uppercase tracking-[.16em]">NHLsnipes</span>
+        <span className="asset-avatar-fallback relative z-[1] flex h-full w-full items-center justify-center text-primary font-mono font-bold">
+          <span className={size === 'hero' ? 'text-2xl' : size === 'lg' ? 'text-xl' : size === 'md' ? 'text-lg' : size === 'sm' ? 'text-base' : 'text-sm'}>
+            {getInitials(label)}
+          </span>
         </span>
       )}
     </span>
