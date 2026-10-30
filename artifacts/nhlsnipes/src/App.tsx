@@ -154,7 +154,9 @@ function QueryState({ loading, error, empty, children, onRetry }: { loading?: bo
 
 function TeamMark({ team, size = 'md' }: { team?: Team; size?: 'sm' | 'md' | 'lg' }) {
   const teamColor = team?.primaryColor || '#81ff57';
-  return <div style={{ animation: 'pulsing-glow 2s ease-in-out infinite', boxShadow: `0 0 0 2px ${teamColor}99, 0 0 20px ${teamColor}66, 0 0 40px ${teamColor}33, 0 0 60px ${teamColor}1a, 0 18px 60px rgba(0,0,0,.26)`, borderRadius: '50%', padding: '4px', display: 'inline-block' }}><TeamCrest team={team} size={size} /></div>;
+  const sizeMap = { sm: '32px', md: '40px', lg: '64px' };
+  const sizePx = sizeMap[size];
+  return <div style={{ animation: 'pulsing-glow 2s ease-in-out infinite', boxShadow: `0 0 0 2px ${teamColor}99, 0 0 20px ${teamColor}66, 0 0 40px ${teamColor}33, 0 0 60px ${teamColor}1a, 0 18px 60px rgba(0,0,0,.26)`, borderRadius: '50%', padding: '4px', display: 'inline-block', width: sizePx, height: sizePx }}><TeamCrest team={team} size={size} /></div>;
 }
 
 function PageHeader({ eyebrow, title, copy, action }: { eyebrow: string; title: string; copy: string; action?: React.ReactNode }) {
