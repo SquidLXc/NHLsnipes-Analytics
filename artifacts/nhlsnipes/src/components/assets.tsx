@@ -13,11 +13,11 @@ const teamSizes: Record<AssetSize, string> = {
 };
 
 const playerSizes: Record<AssetSize, string> = {
-  xs: 'h-7 w-7 rounded-md',
-  sm: 'h-9 w-9 rounded-lg',
-  md: 'h-11 w-11 rounded-xl',
-  lg: 'h-16 w-16 rounded-2xl',
-  hero: 'h-32 w-32 rounded-[1.75rem]',
+  xs: 'h-7 w-7 rounded-full',
+  sm: 'h-9 w-9 rounded-full',
+  md: 'h-11 w-11 rounded-full',
+  lg: 'h-16 w-16 rounded-full',
+  hero: 'h-32 w-32 rounded-full',
 };
 
 function safeColor(color: string | null | undefined, fallback: string) {
